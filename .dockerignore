@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files (sensitive)
+.env
+*.env.local
+
+# Documentation
+*.md
+LICENSE
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backups
+backups/
+
+# Logs
+*.log
+
+# Makefile (not needed in image)
+Makefile
