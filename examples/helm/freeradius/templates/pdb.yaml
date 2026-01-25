@@ -1,0 +1,13 @@
+{{- if .Values.freeradius.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "freeradius.fullname" . }}
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.freeradius.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "freeradius.selectorLabels" . | nindent 6 }}
+{{- end }}

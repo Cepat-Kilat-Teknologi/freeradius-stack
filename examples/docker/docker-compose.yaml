@@ -30,7 +30,9 @@ services:
           cpus: "1.0"
 
   freeradius:
-    build: .
+    build:
+      context: ../..
+      dockerfile: Dockerfile
     container_name: freeradius
     depends_on:
       db:
@@ -48,7 +50,6 @@ services:
     ports:
       - "1812:1812/udp"
       - "1813:1813/udp"
-      # Status server - bind to localhost only for security
       - "127.0.0.1:18121:18121/udp"
     volumes:
       - radius_config:/etc/freeradius/3.0/custom

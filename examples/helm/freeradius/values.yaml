@@ -1,0 +1,109 @@
+# FreeRADIUS Helm Chart Values
+
+# Global settings
+global:
+  timezone: "Asia/Jakarta"
+
+# FreeRADIUS configuration
+freeradius:
+  replicaCount: 2
+
+  image:
+    repository: freeradius
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  # RADIUS secret for client authentication
+  # IMPORTANT: Change this value!
+  secret: "CHANGE_ME_RADIUS_SECRET"
+
+  # Additional RADIUS clients (comma-separated CIDR)
+  # Example: "10.42.0.0/16,192.168.1.0/24"
+  clients: ""
+
+  service:
+    type: LoadBalancer
+    ports:
+      auth: 1812
+      acct: 1813
+    # Optional: specify LoadBalancer IP
+    # loadBalancerIP: ""
+    # Optional: annotations for cloud providers
+    annotations: {}
+
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# MySQL configuration
+mysql:
+  # Set to false to use external MySQL
+  enabled: true
+
+  image:
+    repository: mysql
+    tag: "8.4"
+    pullPolicy: IfNotPresent
+
+  # Database credentials
+  # IMPORTANT: Change these values!
+  rootPassword: "CHANGE_ME_ROOT_PASSWORD"
+  database: "radius"
+  user: "radius"
+  password: "CHANGE_ME_STRONG_PASSWORD"
+
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""  # Use default storage class
+    accessMode: ReadWriteOnce
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+
+# External MySQL configuration (when mysql.enabled=false)
+externalMysql:
+  host: ""
+  port: 3306
+  database: "radius"
+  user: "radius"
+  # Password should be set via --set or values file
+  password: ""
+
+# Service account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 101
+
+# Container security context
+securityContext:
+  runAsNonRoot: false
+  # runAsUser: 101
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}

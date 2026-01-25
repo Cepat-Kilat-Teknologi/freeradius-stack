@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "freeradius.fullname" . }}
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+data:
+  MYSQL_HOST: {{ include "freeradius.mysql.host" . | quote }}
+  MYSQL_PORT: {{ include "freeradius.mysql.port" . | quote }}
+  MYSQL_USER: {{ include "freeradius.mysql.user" . | quote }}
+  MYSQL_DBNAME: {{ include "freeradius.mysql.database" . | quote }}
+  TZ: {{ .Values.global.timezone | quote }}
+  RADIUS_CLIENTS: {{ .Values.freeradius.clients | quote }}

@@ -1,4 +1,8 @@
 .env
+*.env.local
 .DS_Store
 .idea/
+.vscode/
 backups/
+.helm-packages/
+*.tgz

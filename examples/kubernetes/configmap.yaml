@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: freeradius-config
+  namespace: freeradius
+  labels:
+    app.kubernetes.io/name: freeradius
+data:
+  MYSQL_HOST: "mysql"
+  MYSQL_PORT: "3306"
+  MYSQL_USER: "radius"
+  MYSQL_DBNAME: "radius"
+  TZ: "Asia/Jakarta"
+  # Comma-separated CIDR for additional RADIUS clients
+  RADIUS_CLIENTS: ""

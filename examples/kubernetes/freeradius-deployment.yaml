@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: freeradius
+  namespace: freeradius
+  labels:
+    app.kubernetes.io/name: freeradius
+    app.kubernetes.io/component: radius-server
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 1812
+      targetPort: 1812
+      protocol: UDP
+      name: radius-auth
+    - port: 1813
+      targetPort: 1813
+      protocol: UDP
+      name: radius-acct
+  selector:
+    app.kubernetes.io/name: freeradius
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: freeradius-status
+  namespace: freeradius
+  labels:
+    app.kubernetes.io/name: freeradius
+    app.kubernetes.io/component: status
+spec:
+  type: ClusterIP
+  ports:
+    - port: 18121
+      targetPort: 18121
+      protocol: UDP
+      name: radius-status
+  selector:
+    app.kubernetes.io/name: freeradius
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: freeradius
+  namespace: freeradius
+  labels:
+    app.kubernetes.io/name: freeradius
+    app.kubernetes.io/component: radius-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: freeradius
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: freeradius
+        app.kubernetes.io/component: radius-server
+    spec:
+      initContainers:
+        - name: wait-for-mysql
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z mysql 3306; do
+                echo "Waiting for MySQL..."
+                sleep 2
+              done
+              echo "MySQL is ready"
+      containers:
+        - name: freeradius
+          image: freeradius:latest  # Change to your registry
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 1812
+              protocol: UDP
+              name: radius-auth
+            - containerPort: 1813
+              protocol: UDP
+              name: radius-acct
+            - containerPort: 18121
+              protocol: UDP
+              name: radius-status
+          env:
+            - name: MYSQL_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: MYSQL_HOST
+            - name: MYSQL_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: MYSQL_PORT
+            - name: MYSQL_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: MYSQL_USER
+            - name: MYSQL_DBNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: MYSQL_DBNAME
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: TZ
+            - name: RADIUS_CLIENTS
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: RADIUS_CLIENTS
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: freeradius-secret
+                  key: mysql-password
+            - name: RADIUS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: freeradius-secret
+                  key: radius-secret
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/freeradius/3.0/custom
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "radclient -t 3 127.0.0.1:18121 status testing123 < /dev/null 2>&1 | grep -q Received"
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "radclient -t 3 127.0.0.1:18121 status testing123 < /dev/null 2>&1 | grep -q Received"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: config
+          emptyDir: {}

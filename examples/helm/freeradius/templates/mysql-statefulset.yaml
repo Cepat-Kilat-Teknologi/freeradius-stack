@@ -1,0 +1,126 @@
+{{- if .Values.mysql.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "freeradius.fullname" . }}-mysql
+  labels:
+    {{- include "freeradius.mysql.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: mysql
+      protocol: TCP
+      name: mysql
+  selector:
+    {{- include "freeradius.mysql.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "freeradius.fullname" . }}-mysql-headless
+  labels:
+    {{- include "freeradius.mysql.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 3306
+      targetPort: mysql
+      name: mysql
+  selector:
+    {{- include "freeradius.mysql.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "freeradius.fullname" . }}-mysql
+  labels:
+    {{- include "freeradius.mysql.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "freeradius.fullname" . }}-mysql-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "freeradius.mysql.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "freeradius.mysql.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mysql
+          image: "{{ .Values.mysql.image.repository }}:{{ .Values.mysql.image.tag }}"
+          imagePullPolicy: {{ .Values.mysql.image.pullPolicy }}
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freeradius.fullname" . }}
+                  key: mysql-root-password
+            - name: MYSQL_DATABASE
+              value: {{ .Values.mysql.database | quote }}
+            - name: MYSQL_USER
+              value: {{ .Values.mysql.user | quote }}
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freeradius.fullname" . }}
+                  key: mysql-password
+            - name: TZ
+              value: {{ .Values.global.timezone | quote }}
+          resources:
+            {{- toYaml .Values.mysql.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+          livenessProbe:
+            exec:
+              command:
+                - mysqladmin
+                - ping
+                - -h
+                - localhost
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - mysqladmin
+                - ping
+                - -h
+                - localhost
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+  {{- if .Values.mysql.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - {{ .Values.mysql.persistence.accessMode | quote }}
+        {{- if .Values.mysql.persistence.storageClass }}
+        storageClassName: {{ .Values.mysql.persistence.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.mysql.persistence.size | quote }}
+  {{- else }}
+      volumes:
+        - name: data
+          emptyDir: {}
+  {{- end }}
+{{- end }}
