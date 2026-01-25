@@ -26,10 +26,12 @@ freeradius:
     ports:
       auth: 1812
       acct: 1813
-    # Optional: specify LoadBalancer IP
-    # loadBalancerIP: ""
-    # Optional: annotations for cloud providers
+    # Optional: annotations for cloud providers (use for static IP)
+    # Example for GKE: networking.gke.io/load-balancer-type: "Internal"
+    # Example for AWS: service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
     annotations: {}
+    # Deprecated in K8s 1.24+, use annotations instead
+    loadBalancerIP: ""
 
   resources:
     requests:

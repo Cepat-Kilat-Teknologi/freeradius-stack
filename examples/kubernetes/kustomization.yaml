@@ -10,6 +10,8 @@ resources:
   - mysql-statefulset.yaml
   - freeradius-deployment.yaml
 
-commonLabels:
-  app.kubernetes.io/managed-by: kustomize
-  app.kubernetes.io/part-of: freeradius-stack
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+      app.kubernetes.io/part-of: freeradius-stack
+    includeSelectors: false

@@ -105,6 +105,11 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
+      {{- if not .Values.mysql.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
   {{- if .Values.mysql.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:
@@ -118,9 +123,5 @@ spec:
         resources:
           requests:
             storage: {{ .Values.mysql.persistence.size | quote }}
-  {{- else }}
-      volumes:
-        - name: data
-          emptyDir: {}
   {{- end }}
 {{- end }}

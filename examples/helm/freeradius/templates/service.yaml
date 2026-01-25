@@ -11,8 +11,10 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.freeradius.service.type }}
-  {{- if and (eq .Values.freeradius.service.type "LoadBalancer") .Values.freeradius.service.loadBalancerIP }}
+  {{- if .Values.freeradius.service.loadBalancerIP }}
+  {{- if semverCompare "<1.24.0" .Capabilities.KubeVersion.Version }}
   loadBalancerIP: {{ .Values.freeradius.service.loadBalancerIP }}
+  {{- end }}
   {{- end }}
   ports:
     - port: {{ .Values.freeradius.service.ports.auth }}
