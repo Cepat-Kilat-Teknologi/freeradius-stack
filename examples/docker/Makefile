@@ -24,7 +24,7 @@ help:
 
 init-env:
 	@if [ -f .env ]; then echo ".env exists"; exit 1; fi
-	@cp env.template .env
+	@cp .env.example .env
 	@echo "Edit .env and change CHANGE_ME_* values"
 
 build:

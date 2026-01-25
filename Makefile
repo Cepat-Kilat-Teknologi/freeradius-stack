@@ -112,7 +112,7 @@ helm-status:
 # ==================== Development ====================
 
 dev:
-	cd examples/docker && cp env.template .env
+	cd examples/docker && cp .env.example .env
 	@echo "Edit examples/docker/.env then run: make docker-up"
 
 test:

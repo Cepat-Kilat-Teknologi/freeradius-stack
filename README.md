@@ -22,7 +22,7 @@ Production-ready FreeRADIUS deployment with MySQL backend. Supports Docker Compo
 cd examples/docker
 
 # Create environment file
-cp env.template .env
+cp .env.example .env
 
 # Edit .env - change all CHANGE_ME_* values
 nano .env
@@ -87,7 +87,7 @@ freeradius-stack/
 └── examples/
     ├── docker/                   # Docker Compose
     │   ├── docker-compose.yaml
-    │   ├── env.template
+    │   ├── .env.example
     │   └── Makefile
     ├── kubernetes/               # K8s manifests
     │   ├── namespace.yaml
@@ -126,14 +126,14 @@ RADIUS_CLIENTS=10.0.0.0/8,192.168.0.0/16,203.0.113.50/32
 ```
 
 Via database (NAS table):
-```sql
+```
 INSERT INTO nas (nasname, shortname, secret, description)
 VALUES ('192.168.1.1', 'router1', 'secret123', 'Main Router');
 ```
 
 ### Adding Users
 
-```sql
+```
 -- Simple user with password
 INSERT INTO radcheck (username, attribute, op, value)
 VALUES ('john', 'Cleartext-Password', ':=', 'password123');
