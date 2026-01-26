@@ -89,7 +89,8 @@ RUN chown -R freerad:freerad /etc/raddb /var/log/radius /var/run/radiusd 2>/dev/
     && chown freerad:freerad /etc/raddb/custom
 
 # Enable SQL module and disable TLS in SQL config
-RUN ln -sf /etc/raddb/mods-available/sql /etc/raddb/mods-enabled/sql \
+RUN mkdir -p /etc/raddb/mods-enabled \
+    && ln -sf /etc/raddb/mods-available/sql /etc/raddb/mods-enabled/sql \
     && sed -Ei '/^[\t\s#]*tls\s+\{/, /[\t\s#]*\}/ s/^/#/' /etc/raddb/mods-available/sql
 
 # Copy entrypoint and set permissions
