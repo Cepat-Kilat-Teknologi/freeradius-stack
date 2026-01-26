@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreeRADIUS Helm Repository</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2c3e50; margin-top: 0; }
+        h2 { color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+        code {
+            background: #ecf0f1;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        pre code { background: none; padding: 0; }
+        a { color: #3498db; }
+        .badge {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin-right: 8px;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .feature {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #3498db;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FreeRADIUS Helm Repository</h1>
+        <p>
+            <span class="badge">Helm 3</span>
+            <span class="badge">FreeRADIUS 3.2.8</span>
+            <span class="badge">MySQL</span>
+        </p>
+
+        <h2>Quick Start</h2>
+        <pre><code># Add repository
+helm repo add freeradius https://cepat-kilat-teknologi.github.io/freeradius-stack
+helm repo update
+
+# Install
+helm install freeradius freeradius/freeradius \
+    --namespace freeradius \
+    --create-namespace \
+    --set freeradius.secret=YOUR_RADIUS_SECRET \
+    --set mysql.rootPassword=YOUR_ROOT_PASSWORD \
+    --set mysql.password=YOUR_DB_PASSWORD</code></pre>
+
+        <h2>Features</h2>
+        <div class="features">
+            <div class="feature"><strong>FreeRADIUS 3.2.8</strong><br>Latest stable version</div>
+            <div class="feature"><strong>MySQL Backend</strong><br>Built-in or external</div>
+            <div class="feature"><strong>High Availability</strong><br>Multiple replicas</div>
+            <div class="feature"><strong>Auto Backup</strong><br>Scheduled CronJob</div>
+        </div>
+
+        <h2>Available Charts</h2>
+        <table style="width:100%; border-collapse: collapse;">
+            <tr style="background:#f8f9fa;">
+                <th style="padding:12px; text-align:left; border-bottom:2px solid #ddd;">Chart</th>
+                <th style="padding:12px; text-align:left; border-bottom:2px solid #ddd;">Description</th>
+            </tr>
+            <tr>
+                <td style="padding:12px; border-bottom:1px solid #eee;"><code>freeradius/freeradius</code></td>
+                <td style="padding:12px; border-bottom:1px solid #eee;">FreeRADIUS with MySQL backend</td>
+            </tr>
+        </table>
+
+        <h2>Links</h2>
+        <ul>
+            <li><a href="https://github.com/Cepat-Kilat-Teknologi/freeradius-stack">GitHub Repository</a></li>
+            <li><a href="https://github.com/Cepat-Kilat-Teknologi/freeradius-stack/blob/main/examples/helm/freeradius/README.md">Chart Documentation</a></li>
+            <li><a href="https://hub.docker.com/r/cepatkilatteknologi/freeradius">Docker Hub</a></li>
+        </ul>
+
+        <p style="color:#7f8c8d; font-size:0.9em; margin-top:30px;">
+            &copy; 2024 Cepat Kilat Teknologi
+        </p>
+    </div>
+</body>
+</html>
