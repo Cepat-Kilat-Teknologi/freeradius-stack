@@ -77,7 +77,7 @@ spec:
               echo "MySQL is ready"
       containers:
         - name: freeradius
-          image: freeradius:3.2.8  # Change to your registry
+          image: cepatkilatteknologi/freeradius:3.2.8
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 1812

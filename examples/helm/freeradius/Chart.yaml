@@ -10,5 +10,8 @@ keywords:
   - authentication
   - mysql
 maintainers:
-  - name: Your Name
-    email: your.email@example.com
+  - name: Cepat Kilat Teknologi
+    url: https://github.com/Cepat-Kilat-Teknologi
+home: https://github.com/Cepat-Kilat-Teknologi/freeradius-stack
+sources:
+  - https://github.com/Cepat-Kilat-Teknologi/freeradius-stack

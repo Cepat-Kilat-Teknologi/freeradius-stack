@@ -9,7 +9,7 @@ freeradius:
   replicaCount: 2
 
   image:
-    repository: freeradius
+    repository: cepatkilatteknologi/freeradius
     tag: "3.2.8"
     pullPolicy: IfNotPresent
 

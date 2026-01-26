@@ -268,14 +268,14 @@ All replicas share the same MySQL database for user/NAS data.
 ### Docker Images
 
 After CI runs, images are available at:
-- Docker Hub: `docker.io/USERNAME/freeradius:VERSION`
-- GHCR: `ghcr.io/USERNAME/freeradius:VERSION`
+- Docker Hub: `docker.io/cepatkilatteknologi/freeradius:VERSION`
+- GHCR: `ghcr.io/cepat-kilat-teknologi/freeradius:VERSION`
 
 ### Helm Repository
 
 After setting up GitHub Pages:
 ```bash
-helm repo add freeradius https://USERNAME.github.io/freeradius-stack
+helm repo add freeradius https://cepat-kilat-teknologi.github.io/freeradius-stack
 helm repo update
 helm install freeradius freeradius/freeradius
 ```
@@ -289,7 +289,7 @@ helm install freeradius freeradius/freeradius
 docker logs freeradius
 
 # Run in debug mode
-docker exec -it freeradius freeradius -X
+docker exec -it freeradius radiusd -X
 ```
 
 ### Can't connect to MySQL
@@ -310,7 +310,7 @@ docker exec radius-mysql mysql -uroot -p radius \
   -e "SELECT * FROM radcheck WHERE username='testuser';"
 
 # Check RADIUS debug
-docker exec freeradius freeradius -X
+docker exec freeradius radiusd -X
 # Then try authentication and watch the output
 ```
 

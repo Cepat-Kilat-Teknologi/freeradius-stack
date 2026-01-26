@@ -56,7 +56,7 @@ FROM debian:bookworm-slim
 LABEL org.opencontainers.image.title="FreeRADIUS" \
       org.opencontainers.image.description="FreeRADIUS 3.2.8 with MySQL backend" \
       org.opencontainers.image.version="3.2.8" \
-      org.opencontainers.image.source="https://github.com/FreeRADIUS/freeradius-server"
+      org.opencontainers.image.source="https://github.com/Cepat-Kilat-Teknologi/freeradius-stack"
 
 # Install runtime dependencies
 RUN apt-get update -y && apt-get install --no-install-recommends -y \

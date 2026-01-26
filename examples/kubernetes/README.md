@@ -10,18 +10,21 @@ Deploy FreeRADIUS with MySQL to Kubernetes using plain manifests.
 
 ## Quick Start
 
-1. **Build and push the image:**
+1. **Pull the image (or build your own):**
    ```bash
-   # From root directory
+   # Pull from Docker Hub
+   docker pull cepatkilatteknologi/freeradius:3.2.8
+
+   # Or build and push to your own registry
    make build REGISTRY=your-registry.io/username
    make push REGISTRY=your-registry.io/username
    ```
 
-2. **Update image reference:**
+2. **Update image reference (optional):**
    ```bash
-   # Edit freeradius-deployment.yaml
-   # Change: image: freeradius:latest
-   # To: image: your-registry.io/username/freeradius:latest
+   # The default image is cepatkilatteknologi/freeradius:3.2.8
+   # To use GHCR instead, edit freeradius-deployment.yaml:
+   # image: ghcr.io/cepat-kilat-teknologi/freeradius:3.2.8
    ```
 
 3. **Update secrets:**

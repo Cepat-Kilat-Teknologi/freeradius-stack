@@ -12,7 +12,7 @@ env:
   IMAGE_VERSION: "3.2.8"
   # Docker Hub
   DOCKERHUB_REGISTRY: docker.io
-  DOCKERHUB_IMAGE: ${{ github.repository_owner }}/freeradius
+  DOCKERHUB_IMAGE: cepatkilatteknologi/freeradius
   # GitHub Container Registry
   GHCR_REGISTRY: ghcr.io
   GHCR_IMAGE: ${{ github.repository_owner }}/freeradius

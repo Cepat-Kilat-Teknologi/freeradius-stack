@@ -6,7 +6,7 @@ Helm chart for deploying FreeRADIUS with MySQL backend on Kubernetes.
 
 - Kubernetes 1.25+
 - Helm 3.x
-- FreeRADIUS image available in a registry
+- FreeRADIUS image (default: `cepatkilatteknologi/freeradius:3.2.8`)
 
 ## Installation
 
@@ -54,8 +54,8 @@ helm install freeradius examples/helm/freeradius \
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `freeradius.replicaCount` | Number of FreeRADIUS pods | `2` |
-| `freeradius.image.repository` | Image repository | `freeradius` |
-| `freeradius.image.tag` | Image tag | `latest` |
+| `freeradius.image.repository` | Image repository | `cepatkilatteknologi/freeradius` |
+| `freeradius.image.tag` | Image tag | `3.2.8` |
 | `freeradius.secret` | RADIUS shared secret | `CHANGE_ME_RADIUS_SECRET` |
 | `freeradius.clients` | Additional clients (CIDR) | `""` |
 | `freeradius.service.type` | Service type | `LoadBalancer` |
@@ -143,5 +143,5 @@ kubectl -n freeradius get pods
 kubectl -n freeradius logs -l app.kubernetes.io/name=freeradius
 
 # Debug FreeRADIUS
-kubectl -n freeradius exec -it deploy/freeradius -- freeradius -X
+kubectl -n freeradius exec -it deploy/freeradius -- radiusd -X
 ```

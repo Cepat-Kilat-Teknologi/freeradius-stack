@@ -36,7 +36,7 @@ cat > index.html << 'EOF'
     <h2>Usage</h2>
     <pre>
 # Add repository
-helm repo add freeradius https://YOUR_USERNAME.github.io/freeradius-stack
+helm repo add freeradius https://cepat-kilat-teknologi.github.io/freeradius-stack
 helm repo update
 
 # Install
@@ -50,7 +50,7 @@ helm install freeradius freeradius/freeradius \
         <li><code>freeradius/freeradius</code> - FreeRADIUS with MySQL backend</li>
     </ul>
 
-    <p>For more information, see the <a href="https://github.com/YOUR_USERNAME/freeradius-stack">GitHub repository</a>.</p>
+    <p>For more information, see the <a href="https://github.com/Cepat-Kilat-Teknologi/freeradius-stack">GitHub repository</a>.</p>
 </body>
 </html>
 EOF
