@@ -36,17 +36,63 @@ if [[ "$mysql_ready" != "true" ]]; then
     exit 1
 fi
 
-# Use persistent lock file location
-LOCK_FILE="/etc/freeradius/3.0/custom/init.lock"
+# Function to check if schema already exists
+schema_exists() {
+    local table_count
+    table_count=$(MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$MYSQL_DBNAME' AND table_name='radcheck';" 2>/dev/null || echo "0")
+    [[ "$table_count" -gt 0 ]]
+}
 
-if [[ ! -f "$LOCK_FILE" ]]; then
+# Function to acquire lock using MySQL (works across pods)
+acquire_db_lock() {
+    local lock_name="freeradius_init_lock"
+    local lock_timeout=30
+    local result
+    result=$(MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT GET_LOCK('$lock_name', $lock_timeout);" 2>/dev/null || echo "0")
+    [[ "$result" == "1" ]]
+}
+
+# Function to release lock
+release_db_lock() {
+    local lock_name="freeradius_init_lock"
+    MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT RELEASE_LOCK('$lock_name');" &>/dev/null || true
+}
+
+# Use local file lock for config modifications (per-container)
+LOCAL_LOCK_FILE="/etc/freeradius/3.0/custom/init.lock"
+
+# Only do initialization if local lock doesn't exist
+if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
     cd /etc/freeradius/3.0 || { echo "Failed to cd /etc/freeradius/3.0"; exit 1; }
 
+    # Database schema import with distributed locking
     if [[ -z "$DO_NOT_IMPORT_DB" ]]; then
-        echo "Importing default DB structure..."
-        if ! MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" < mods-config/sql/main/mysql/schema.sql; then
-            echo "Failed to import DB structure. Exiting..." >&2
-            exit 1
+        if schema_exists; then
+            echo "Database schema already exists. Skipping import."
+        else
+            echo "Acquiring database lock for schema import..."
+            if acquire_db_lock; then
+                # Double-check after acquiring lock (another pod might have imported)
+                if schema_exists; then
+                    echo "Schema was imported by another instance. Skipping."
+                else
+                    echo "Importing default DB structure..."
+                    if ! MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" < mods-config/sql/main/mysql/schema.sql; then
+                        release_db_lock
+                        echo "Failed to import DB structure. Exiting..." >&2
+                        exit 1
+                    fi
+                    echo "Database schema imported successfully."
+                fi
+                release_db_lock
+            else
+                echo "Could not acquire lock. Checking if schema exists..."
+                # Wait a bit and check if schema exists (another pod is likely importing)
+                sleep 5
+                if ! schema_exists; then
+                    echo "Warning: Schema still doesn't exist after waiting. Continuing anyway..."
+                fi
+            fi
         fi
     fi
 
@@ -79,12 +125,20 @@ client localhost-healthcheck {
 }
 EOT
 
-    # Add Docker network client for internal communication
+    # Add common private network ranges for container orchestration
     cat <<EOT >> /etc/freeradius/3.0/sites-available/status
 
-# Docker internal network
-client docker-internal {
+# Container orchestration networks (Docker/Kubernetes)
+client container-networks {
+    ipaddr = 10.0.0.0/8
+    secret = ${RADIUS_SECRET}
+}
+client docker-networks {
     ipaddr = 172.16.0.0/12
+    secret = ${RADIUS_SECRET}
+}
+client private-class-c {
+    ipaddr = 192.168.0.0/16
     secret = ${RADIUS_SECRET}
 }
 EOT
@@ -111,11 +165,16 @@ EOT
         done
     fi
 
-    touch "$LOCK_FILE"
+    touch "$LOCAL_LOCK_FILE"
     echo "Initialization complete."
 else
-    echo "Already initialized. Skipping DB import and config."
+    echo "Already initialized. Skipping config modifications."
 fi
 
+# Trap signals for graceful shutdown
+trap 'echo "Received shutdown signal, stopping FreeRADIUS..."; kill -TERM "$child" 2>/dev/null; wait "$child"' SIGTERM SIGINT
+
 echo "Starting FreeRADIUS..."
-exec freeradius -f
+freeradius -f &
+child=$!
+wait "$child"

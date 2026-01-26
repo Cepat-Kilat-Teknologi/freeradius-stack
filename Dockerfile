@@ -26,4 +26,7 @@ EXPOSE 1812/udp 1813/udp 18121/udp
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD radclient -t 3 -x 127.0.0.1:18121 status testing123 < /dev/null 2>&1 | grep -q "Received" || exit 1
 
+# Graceful shutdown
+STOPSIGNAL SIGTERM
+
 ENTRYPOINT ["/entrypoint.sh"]
