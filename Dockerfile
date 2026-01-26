@@ -12,7 +12,6 @@ RUN apt-get update -y && apt-get install --no-install-recommends -y \
     libssl-dev \
     libmariadb-dev \
     libtalloc-dev \
-    libkqueue-dev \
     libpcre2-dev \
     libcap-dev \
     libgdbm-dev \
@@ -63,7 +62,6 @@ RUN apt-get update -y && apt-get install --no-install-recommends -y \
     libssl3 \
     libmariadb3 \
     libtalloc2 \
-    libkqueue0 \
     libpcre2-8-0 \
     libcap2 \
     libgdbm6 \
