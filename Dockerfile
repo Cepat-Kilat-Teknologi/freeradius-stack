@@ -3,6 +3,7 @@ FROM debian:bookworm-slim AS builder
 
 # FreeRADIUS version
 ARG FREERADIUS_VERSION=3.2.8
+ARG FREERADIUS_RELEASE_TAG=3_2_8
 
 # Install build dependencies
 RUN apt-get update -y && apt-get install --no-install-recommends -y \
@@ -26,7 +27,7 @@ RUN apt-get update -y && apt-get install --no-install-recommends -y \
 
 # Download and extract FreeRADIUS source
 WORKDIR /tmp
-RUN curl -fsSL "https://github.com/FreeRADIUS/freeradius-server/releases/download/release_${FREERADIUS_VERSION//./_}/freeradius-server-${FREERADIUS_VERSION}.tar.gz" \
+RUN curl -fsSL "https://github.com/FreeRADIUS/freeradius-server/releases/download/release_${FREERADIUS_RELEASE_TAG}/freeradius-server-${FREERADIUS_VERSION}.tar.gz" \
     -o freeradius.tar.gz \
     && tar -xzf freeradius.tar.gz \
     && rm freeradius.tar.gz
