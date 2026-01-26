@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs status clean backup restore
+.PHONY: help pull up down restart logs status clean backup restore
 
 # Load .env file if exists
 ifneq (,$(wildcard ./.env))
@@ -11,7 +11,7 @@ help:
 	@echo "============================"
 	@echo ""
 	@echo "  make init-env     - Create .env from template"
-	@echo "  make build        - Build images"
+	@echo "  make pull         - Pull latest images"
 	@echo "  make up           - Start services"
 	@echo "  make down         - Stop services"
 	@echo "  make logs         - View logs"
@@ -31,8 +31,8 @@ init-env:
 	@cp .env.example .env
 	@echo "Edit .env and change CHANGE_ME_* values"
 
-build:
-	docker compose build
+pull:
+	docker compose pull
 
 up:
 	docker compose up -d

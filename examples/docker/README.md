@@ -11,8 +11,8 @@ make init-env
 # 2. Edit .env - change all CHANGE_ME_* values
 nano .env
 
-# 3. Build and start
-make build
+# 3. Pull and start
+make pull
 make up
 
 # 4. Check status
@@ -25,7 +25,7 @@ make logs
 | Command | Description |
 |---------|-------------|
 | `make init-env` | Create .env from template |
-| `make build` | Build images |
+| `make pull` | Pull latest images |
 | `make up` | Start services |
 | `make down` | Stop services |
 | `make logs` | View logs |

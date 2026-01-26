@@ -28,7 +28,7 @@ cp .env.example .env
 nano .env
 
 # Start services
-make build && make up
+make pull && make up
 
 # Check status
 make status
@@ -186,7 +186,7 @@ make helm-template     # Render templates
 
 ```bash
 make init-env          # Create .env file
-make build             # Build image
+make pull              # Pull images
 make up                # Start services
 make down              # Stop services
 make logs              # View logs
