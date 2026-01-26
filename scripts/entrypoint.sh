@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# FreeRADIUS config directory (source install uses /etc/raddb)
+RADDB_DIR="/etc/raddb"
+
 # Validate required environment variables
 required_vars=("MYSQL_HOST" "MYSQL_PORT" "MYSQL_USER" "MYSQL_PASSWORD" "MYSQL_DBNAME" "RADIUS_SECRET")
 for var in "${required_vars[@]}"; do
@@ -16,7 +19,7 @@ if [[ -n "$TZ" ]]; then
     echo "$TZ" > /etc/timezone
 fi
 
-echo "Starting FreeRADIUS initialization..."
+echo "Starting FreeRADIUS 3.2.8 initialization..."
 
 # Wait for MySQL with proper timeout handling
 echo "Waiting for MySQL to be ready..."
@@ -59,11 +62,11 @@ release_db_lock() {
 }
 
 # Use local file lock for config modifications (per-container)
-LOCAL_LOCK_FILE="/etc/freeradius/3.0/custom/init.lock"
+LOCAL_LOCK_FILE="${RADDB_DIR}/custom/init.lock"
 
 # Only do initialization if local lock doesn't exist
 if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
-    cd /etc/freeradius/3.0 || { echo "Failed to cd /etc/freeradius/3.0"; exit 1; }
+    cd "$RADDB_DIR" || { echo "Failed to cd $RADDB_DIR"; exit 1; }
 
     # Database schema import with distributed locking
     if [[ -z "$DO_NOT_IMPORT_DB" ]]; then
@@ -113,20 +116,22 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
         mods-enabled/sql
 
     echo "Enabling Status Server..."
-    ln -sf /etc/freeradius/3.0/sites-available/status /etc/freeradius/3.0/sites-enabled/status
+    ln -sf "${RADDB_DIR}/sites-available/status" "${RADDB_DIR}/sites-enabled/status"
 
-    # Add localhost client for internal healthcheck (fixed secret for Docker healthcheck)
-    cat <<'EOT' >> /etc/freeradius/3.0/sites-available/status
+    # Add localhost client for internal healthcheck
+    # Uses HEALTHCHECK_SECRET env var (defaults to testing123 if not set)
+    healthcheck_secret="${HEALTHCHECK_SECRET:-testing123}"
+    cat <<EOT >> "${RADDB_DIR}/sites-available/status"
 
 # Internal healthcheck client (localhost only)
 client localhost-healthcheck {
     ipaddr = 127.0.0.1
-    secret = testing123
+    secret = ${healthcheck_secret}
 }
 EOT
 
     # Add common private network ranges for container orchestration
-    cat <<EOT >> /etc/freeradius/3.0/sites-available/status
+    cat <<EOT >> "${RADDB_DIR}/sites-available/status"
 
 # Container orchestration networks (Docker/Kubernetes)
 client container-networks {
@@ -152,7 +157,7 @@ EOT
             # Trim whitespace
             client_cidr=$(echo "$client_cidr" | xargs)
             if [[ -n "$client_cidr" ]]; then
-                cat <<EOT >> /etc/freeradius/3.0/sites-available/status
+                cat <<EOT >> "${RADDB_DIR}/sites-available/status"
 
 client custom-${client_num} {
     ipaddr = ${client_cidr}
@@ -174,7 +179,7 @@ fi
 # Trap signals for graceful shutdown
 trap 'echo "Received shutdown signal, stopping FreeRADIUS..."; kill -TERM "$child" 2>/dev/null; wait "$child"' SIGTERM SIGINT
 
-echo "Starting FreeRADIUS..."
-freeradius -f &
+echo "Starting FreeRADIUS 3.2.8..."
+radiusd -f &
 child=$!
 wait "$child"

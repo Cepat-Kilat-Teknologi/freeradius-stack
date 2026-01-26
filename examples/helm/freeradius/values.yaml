@@ -10,12 +10,16 @@ freeradius:
 
   image:
     repository: freeradius
-    tag: "latest"
+    tag: "3.2.8"
     pullPolicy: IfNotPresent
 
   # RADIUS secret for client authentication
   # IMPORTANT: Change this value!
   secret: "CHANGE_ME_RADIUS_SECRET"
+
+  # Internal healthcheck secret (localhost only)
+  # Used for status server health probes
+  healthcheckSecret: "CHANGE_ME_HEALTHCHECK_SECRET"
 
   # Additional RADIUS clients (comma-separated CIDR)
   # Example: "10.42.0.0/16,192.168.1.0/24"

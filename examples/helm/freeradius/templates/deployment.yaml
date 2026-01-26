@@ -110,17 +110,22 @@ spec:
                 secretKeyRef:
                   name: {{ include "freeradius.fullname" . }}
                   key: radius-secret
+            - name: HEALTHCHECK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freeradius.fullname" . }}
+                  key: healthcheck-secret
           resources:
             {{- toYaml .Values.freeradius.resources | nindent 12 }}
           volumeMounts:
             - name: config
-              mountPath: /etc/freeradius/3.0/custom
+              mountPath: /etc/raddb/custom
           livenessProbe:
             exec:
               command:
                 - sh
                 - -c
-                - "radclient -t 3 127.0.0.1:18121 status testing123 < /dev/null 2>&1 | grep -q Received"
+                - "radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET < /dev/null 2>&1 | grep -q Received"
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 10
@@ -129,7 +134,7 @@ spec:
               command:
                 - sh
                 - -c
-                - "radclient -t 3 127.0.0.1:18121 status testing123 < /dev/null 2>&1 | grep -q Received"
+                - "radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET < /dev/null 2>&1 | grep -q Received"
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5

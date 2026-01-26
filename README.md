@@ -4,7 +4,7 @@ Production-ready FreeRADIUS deployment with MySQL backend. Supports Docker Compo
 
 ## Features
 
-- **FreeRADIUS 3.0** with MySQL/MariaDB backend
+- **FreeRADIUS 3.2.8** (latest stable) with MySQL/MariaDB backend
 - **Multi-platform** Docker images (amd64, arm64)
 - **Multiple deployment options**: Docker Compose, Kubernetes manifests, Helm chart
 - **High Availability** ready with external MySQL cluster support
@@ -117,6 +117,7 @@ freeradius-stack/
 | `RADIUS_CLIENTS` | Additional clients (comma-separated CIDR) | No |
 | `TZ` | Timezone (e.g., `Asia/Jakarta`) | No |
 | `DO_NOT_IMPORT_DB` | Skip DB schema import if set | No |
+| `HEALTHCHECK_SECRET` | Secret for internal health checks (localhost only) | No |
 
 ### Adding RADIUS Clients
 
@@ -211,9 +212,9 @@ docker exec freeradius radtest testuser testpass localhost 0 YOUR_SECRET
 ### Test Status Server
 
 ```bash
-# From container
+# From container (uses HEALTHCHECK_SECRET environment variable)
 docker exec freeradius sh -c \
-  'echo "Message-Authenticator = 0x00" | radclient 127.0.0.1:18121 status testing123'
+  'echo "Message-Authenticator = 0x00" | radclient 127.0.0.1:18121 status $HEALTHCHECK_SECRET'
 ```
 
 ## High Availability
@@ -316,8 +317,8 @@ docker exec freeradius freeradius -X
 ### Health check failing
 
 ```bash
-# Test status server manually
-docker exec freeradius radclient -t 3 127.0.0.1:18121 status testing123
+# Test status server manually (uses HEALTHCHECK_SECRET)
+docker exec freeradius sh -c 'radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET'
 ```
 
 ## Security Considerations
