@@ -9,6 +9,7 @@ resources:
   - configmap.yaml
   - mysql-statefulset.yaml
   - freeradius-deployment.yaml
+  - backup-cronjob.yaml
 
 labels:
   - pairs:

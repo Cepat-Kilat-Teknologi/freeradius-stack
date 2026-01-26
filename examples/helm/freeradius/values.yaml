@@ -108,3 +108,40 @@ tolerations: []
 
 # Affinity rules
 affinity: {}
+
+# Backup configuration
+backup:
+  # Enable automated backups
+  enabled: true
+
+  # Cron schedule (default: daily at 2 AM)
+  schedule: "0 2 * * *"
+
+  # Number of days to retain backups
+  retentionDays: 7
+
+  # Job history limits
+  historyLimit:
+    success: 3
+    failed: 3
+
+  # Backup image (MariaDB client)
+  image:
+    repository: mariadb
+    tag: "11"
+    pullPolicy: IfNotPresent
+
+  # Persistent storage for backups
+  persistence:
+    size: 5Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+  # Resources for backup job
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"

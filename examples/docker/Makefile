@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs status clean
+.PHONY: help build up down restart logs status clean backup restore
 
 # Load .env file if exists
 ifneq (,$(wildcard ./.env))
@@ -21,6 +21,10 @@ help:
 	@echo "  make mysql        - Connect to MySQL"
 	@echo "  make test-auth    - Test RADIUS auth"
 	@echo "  make add-test-user - Add test user"
+	@echo ""
+	@echo "  make backup       - Backup database"
+	@echo "  make restore FILE=<path> - Restore database"
+	@echo "  make list-backups - List available backups"
 
 init-env:
 	@if [ -f .env ]; then echo ".env exists"; exit 1; fi
@@ -60,3 +64,30 @@ add-test-user:
 	@docker compose exec db mysql -uroot -p"$(MYSQL_ROOT_PASSWORD)" "$(MYSQL_DBNAME)" -e \
 		"INSERT INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass') ON DUPLICATE KEY UPDATE value='testpass';"
 	@echo "Test user added: testuser/testpass"
+
+# Backup & Restore
+backup:
+	@mkdir -p backups
+	@echo "Creating backup..."
+	@docker compose exec -T db mysqldump -uroot -p"$(MYSQL_ROOT_PASSWORD)" \
+		--single-transaction --routines --triggers \
+		"$(MYSQL_DBNAME)" | gzip > backups/radius_$$(date +%Y%m%d_%H%M%S).sql.gz
+	@echo "Backup created:"
+	@ls -lh backups/*.sql.gz | tail -1
+
+restore:
+	@if [ -z "$(FILE)" ]; then \
+		echo "Usage: make restore FILE=backups/radius_xxx.sql.gz"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FILE)" ]; then \
+		echo "Error: File $(FILE) not found"; \
+		exit 1; \
+	fi
+	@echo "Restoring from $(FILE)..."
+	@gunzip -c "$(FILE)" | docker compose exec -T db mysql -uroot -p"$(MYSQL_ROOT_PASSWORD)" "$(MYSQL_DBNAME)"
+	@echo "Restore complete"
+
+list-backups:
+	@echo "Available backups:"
+	@ls -lh backups/*.sql.gz 2>/dev/null || echo "No backups found"
