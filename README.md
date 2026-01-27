@@ -4,8 +4,8 @@ Production-ready FreeRADIUS deployment with MySQL backend. Supports Docker Compo
 
 ## Features
 
-- **FreeRADIUS 3.2.8** (latest stable) with MySQL/MariaDB backend
-- **Multi-platform** Docker images (amd64, arm64)
+- **FreeRADIUS 3.2.x** with MySQL/MariaDB backend (Debian Trixie packages)
+- **Multi-platform** Docker images (linux/amd64, linux/arm64)
 - **Multiple deployment options**: Docker Compose, Kubernetes manifests, Helm chart
 - **High Availability** ready with external MySQL cluster support
 - **Auto-initialization** of database schema
@@ -13,6 +13,13 @@ Production-ready FreeRADIUS deployment with MySQL backend. Supports Docker Compo
 - **Health checks** for container orchestration
 - **Log rotation** to prevent disk bloat
 - **CI/CD** with GitHub Actions
+
+## Docker Images
+
+| Registry | Image |
+|----------|-------|
+| Docker Hub | `cepatkilatteknologi/freeradius:latest` |
+| GHCR | `ghcr.io/cepat-kilat-teknologi/freeradius:latest` |
 
 ## Quick Start
 
@@ -206,7 +213,7 @@ make clean             # Remove everything
 radtest username password localhost 1812 YOUR_SECRET
 
 # From container
-docker exec freeradius radtest testuser testpass localhost 0 YOUR_SECRET
+docker exec freeradius sh -c 'echo "User-Name=testuser,User-Password=testpass" | radclient 127.0.0.1:1812 auth testing123'
 ```
 
 ### Test Status Server
@@ -289,14 +296,14 @@ helm install freeradius freeradius/freeradius
 docker logs freeradius
 
 # Run in debug mode
-docker exec -it freeradius radiusd -X
+docker exec -it freeradius freeradius -X
 ```
 
 ### Can't connect to MySQL
 
 ```bash
 # Verify MySQL is running
-docker exec freeradius mysqladmin -h$MYSQL_HOST -u$MYSQL_USER -p ping
+docker exec freeradius mysql --skip-ssl -h db -u $MYSQL_USER -p$MYSQL_PASSWORD -e "SELECT 1"
 
 # Check environment variables
 docker exec freeradius env | grep MYSQL
@@ -306,19 +313,19 @@ docker exec freeradius env | grep MYSQL
 
 ```bash
 # Check user exists
-docker exec radius-mysql mysql -uroot -p radius \
+docker exec radius-mysql mysql -u radius -p$MYSQL_PASSWORD radius \
   -e "SELECT * FROM radcheck WHERE username='testuser';"
 
 # Check RADIUS debug
-docker exec freeradius radiusd -X
+docker exec freeradius freeradius -X
 # Then try authentication and watch the output
 ```
 
 ### Health check failing
 
 ```bash
-# Test status server manually (uses HEALTHCHECK_SECRET)
-docker exec freeradius sh -c 'radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET'
+# Test status server manually
+docker exec freeradius sh -c 'echo "Message-Authenticator = 0x00" | radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET'
 ```
 
 ## Security Considerations
