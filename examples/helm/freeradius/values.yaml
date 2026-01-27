@@ -100,9 +100,14 @@ podSecurityContext:
   fsGroup: 101
 
 # Container security context
+# Note: FreeRADIUS requires root for initial setup, but drops privileges after
 securityContext:
-  runAsNonRoot: false
-  # runAsUser: 101
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE  # Required for binding to ports < 1024 if needed
 
 # Node selector
 nodeSelector: {}
@@ -111,7 +116,16 @@ nodeSelector: {}
 tolerations: []
 
 # Affinity rules
-affinity: {}
+# Default: spread pods across nodes for high availability
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: freeradius
+          topologyKey: kubernetes.io/hostname
 
 # Backup configuration
 backup:
