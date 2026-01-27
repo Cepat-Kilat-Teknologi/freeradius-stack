@@ -1,0 +1,87 @@
+# FreeRADIUS Helm Chart - Local Development Values
+# Optimized for faster startup on resource-constrained machines
+#
+# Usage:
+#   helm install freeradius ./examples/helm/freeradius \
+#     -f ./examples/helm/freeradius/values-local.yaml \
+#     --namespace freeradius --create-namespace
+
+# Global settings
+global:
+  timezone: "Asia/Jakarta"
+
+# FreeRADIUS configuration
+freeradius:
+  # Single replica for local development
+  replicaCount: 1
+
+  image:
+    repository: cepatkilatteknologi/freeradius
+    tag: "3.2.8"
+    pullPolicy: IfNotPresent
+
+  secret: "localsecret123"
+  healthcheckSecret: "healthcheck123"
+  clients: ""
+
+  service:
+    type: ClusterIP  # No LoadBalancer overhead
+    ports:
+      auth: 1812
+      acct: 1813
+
+  # Reduced resources for local development
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "250m"
+
+  podDisruptionBudget:
+    enabled: false  # Not needed for local
+
+# MySQL configuration - Use MariaDB for faster startup
+mysql:
+  enabled: true
+
+  image:
+    # MariaDB starts faster than MySQL 8.4
+    repository: mariadb
+    tag: "11"
+    pullPolicy: IfNotPresent
+
+  rootPassword: "localroot123"
+  database: "radius"
+  user: "radius"
+  password: "localpass123"
+
+  persistence:
+    enabled: false  # Use emptyDir for faster startup
+
+  # Reduced resources for local development
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+# Disable backup for local development
+backup:
+  enabled: false
+
+# No service account needed for local
+serviceAccount:
+  create: false
+
+# No pod security context for local
+podSecurityContext: {}
+securityContext: {}
+
+# No affinity rules for single node
+affinity: {}
+nodeSelector: {}
+tolerations: []

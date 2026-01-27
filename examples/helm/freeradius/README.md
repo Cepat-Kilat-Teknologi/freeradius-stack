@@ -10,6 +10,18 @@ Helm chart for deploying FreeRADIUS with MySQL backend on Kubernetes.
 - Helm 3.x
 - Storage provisioner for PersistentVolumes (if persistence enabled)
 
+## Startup Time
+
+Expected startup times vary by environment:
+
+| Environment | Database | Replicas | Startup Time |
+|-------------|----------|----------|--------------|
+| Docker Desktop (8GB RAM) | MySQL 8.4 | 2 | ~5+ minutes |
+| Docker Desktop (8GB RAM) | MariaDB 11 | 1 | ~90 seconds |
+| Production K8s (16GB+ RAM) | MySQL 8.4 | 2 | ~2-3 minutes |
+
+For faster local development, use `values-local.yaml` (see [Local Development](#local-development)).
+
 ## Quick Start
 
 ### 1. Switch to Local Kubernetes Context (if needed)
@@ -120,10 +132,13 @@ radtest testuser testpass localhost 0 YOUR_RADIUS_SECRET
 | `freeradius.clients` | Additional clients (CIDR) | `""` |
 | `freeradius.service.type` | Service type | `LoadBalancer` |
 | `mysql.enabled` | Deploy bundled MySQL | `true` |
+| `mysql.image.repository` | MySQL/MariaDB image | `mysql` |
+| `mysql.image.tag` | Image tag | `8.4` |
 | `mysql.rootPassword` | MySQL root password | `CHANGE_ME_ROOT_PASSWORD` |
 | `mysql.password` | MySQL user password | `CHANGE_ME_STRONG_PASSWORD` |
 | `mysql.persistence.enabled` | Enable persistence | `true` |
 | `mysql.persistence.size` | PVC size | `10Gi` |
+| `mysql.persistence.storageClass` | Storage class | `""` (default) |
 | `backup.enabled` | Enable backup CronJob | `true` |
 | `backup.schedule` | Backup schedule | `0 2 * * *` |
 
@@ -136,6 +151,26 @@ radtest testuser testpass localhost 0 YOUR_RADIUS_SECRET
 | `externalMysql.database` | Database name | `radius` |
 | `externalMysql.user` | Database user | `radius` |
 | `externalMysql.password` | Database password | `""` |
+
+## Local Development
+
+For faster startup on resource-constrained machines (laptops with 8GB RAM), use the optimized local development values:
+
+```bash
+helm install freeradius ./examples/helm/freeradius \
+  -f ./examples/helm/freeradius/values-local.yaml \
+  --namespace freeradius \
+  --create-namespace
+```
+
+**`values-local.yaml` optimizations:**
+- Uses MariaDB 11 instead of MySQL 8.4 (faster startup)
+- Single replica (reduces resource usage)
+- No persistence (uses emptyDir)
+- Reduced resource requests
+- Backup disabled
+
+This reduces startup time from **5+ minutes to ~90 seconds** on Docker Desktop.
 
 ## Installation Options
 

@@ -88,23 +88,21 @@ spec:
           livenessProbe:
             exec:
               command:
-                - mysqladmin
-                - ping
-                - -h
-                - localhost
-            initialDelaySeconds: 120
+                - sh
+                - -c
+                - "mysqladmin ping -h localhost 2>/dev/null || mariadb-admin ping -h localhost 2>/dev/null"
+            initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
             exec:
               command:
-                - mysqladmin
-                - ping
-                - -h
-                - localhost
-            initialDelaySeconds: 30
-            periodSeconds: 10
+                - sh
+                - -c
+                - "mysqladmin ping -h localhost 2>/dev/null || mariadb-admin ping -h localhost 2>/dev/null"
+            initialDelaySeconds: 15
+            periodSeconds: 5
             timeoutSeconds: 5
       {{- if not .Values.mysql.persistence.enabled }}
       volumes:

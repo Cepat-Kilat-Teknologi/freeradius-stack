@@ -61,7 +61,13 @@ make k8s-status
 ### Helm
 
 ```bash
-# Install with bundled MySQL
+# For local development (faster startup ~90s)
+helm install freeradius examples/helm/freeradius \
+  -f examples/helm/freeradius/values-local.yaml \
+  --namespace freeradius \
+  --create-namespace
+
+# For production with bundled MySQL
 helm install freeradius examples/helm/freeradius \
   --namespace freeradius \
   --create-namespace \
@@ -105,7 +111,8 @@ freeradius-stack/
     │   └── kustomization.yaml
     └── helm/freeradius/          # Helm chart
         ├── Chart.yaml
-        ├── values.yaml
+        ├── values.yaml            # Production values
+        ├── values-local.yaml      # Local development (faster)
         └── templates/
 ```
 
