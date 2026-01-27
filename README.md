@@ -201,6 +201,9 @@ make status            # Show status
 make mysql             # Connect to MySQL
 make add-test-user     # Add test user
 make test-auth         # Test authentication
+make backup            # Backup database
+make restore FILE=x    # Restore from backup
+make list-backups      # List available backups
 make clean             # Remove everything
 ```
 
@@ -222,6 +225,42 @@ docker exec freeradius sh -c 'echo "User-Name=testuser,User-Password=testpass" |
 # From container (uses HEALTHCHECK_SECRET environment variable)
 docker exec freeradius sh -c \
   'echo "Message-Authenticator = 0x00" | radclient 127.0.0.1:18121 status $HEALTHCHECK_SECRET'
+```
+
+## Backup & Restore
+
+### Create Backup
+
+```bash
+cd examples/docker
+
+# Create a timestamped backup
+make backup
+# Creates: backups/radius_YYYYMMDD_HHMMSS.sql.gz
+
+# List available backups
+make list-backups
+```
+
+### Restore from Backup
+
+```bash
+# Restore a specific backup
+make restore FILE=backups/radius_20260127_120000.sql.gz
+
+# Verify restore was successful
+make test-auth
+```
+
+### Manual Backup Commands
+
+```bash
+# Backup
+docker compose exec -T db mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" \
+  --single-transaction --routines --triggers radius | gzip > backup.sql.gz
+
+# Restore
+gunzip -c backup.sql.gz | docker compose exec -T db mysql -uroot -p"$MYSQL_ROOT_PASSWORD" radius
 ```
 
 ## High Availability
