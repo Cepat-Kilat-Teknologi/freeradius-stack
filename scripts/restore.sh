@@ -1,6 +1,6 @@
 #!/bin/bash
 # FreeRADIUS Database Restore Script
-set -e
+set -eo pipefail
 
 # Configuration
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
@@ -42,20 +42,36 @@ if [[ -t 0 ]]; then
     fi
 fi
 
+# Verify backup file integrity before restore
+if [[ "$BACKUP_FILE" == *.gz ]]; then
+    echo "Verifying backup file integrity..."
+    if ! gzip -t "$BACKUP_FILE" 2>/dev/null; then
+        echo "Error: Backup file is corrupted (invalid gzip)" >&2
+        exit 1
+    fi
+    echo "Backup file integrity verified."
+fi
+
 # Perform restore
 echo "Restoring database..."
 if [[ "$BACKUP_FILE" == *.gz ]]; then
-    gunzip -c "$BACKUP_FILE" | MYSQL_PWD="$MYSQL_PASSWORD" mysql \
-        -h"$MYSQL_HOST" \
+    if ! gunzip -c "$BACKUP_FILE" | MYSQL_PWD="$MYSQL_PASSWORD" mysql \
+        --connect-timeout=30 -h"$MYSQL_HOST" \
         -P"$MYSQL_PORT" \
         -u"$MYSQL_USER" \
-        "$MYSQL_DBNAME"
+        "$MYSQL_DBNAME"; then
+        echo "Error: Database restore failed" >&2
+        exit 1
+    fi
 else
-    MYSQL_PWD="$MYSQL_PASSWORD" mysql \
-        -h"$MYSQL_HOST" \
+    if ! MYSQL_PWD="$MYSQL_PASSWORD" mysql \
+        --connect-timeout=30 -h"$MYSQL_HOST" \
         -P"$MYSQL_PORT" \
         -u"$MYSQL_USER" \
-        "$MYSQL_DBNAME" < "$BACKUP_FILE"
+        "$MYSQL_DBNAME" < "$BACKUP_FILE"; then
+        echo "Error: Database restore failed" >&2
+        exit 1
+    fi
 fi
 
 echo ""

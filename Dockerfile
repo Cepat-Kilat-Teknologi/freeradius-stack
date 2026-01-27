@@ -35,8 +35,9 @@ COPY --chmod=755 scripts/entrypoint.sh /entrypoint.sh
 EXPOSE 1812/udp 1813/udp 18121/udp
 
 # Healthcheck secret (internal use only, localhost binding)
-# Default matches the admin client secret in sites-available/status
-ENV HEALTHCHECK_SECRET=adminsecret
+# IMPORTANT: Override this with a secure value in production
+# This default is intentionally weak to remind users to change it
+ENV HEALTHCHECK_SECRET=CHANGE_ME_HEALTHCHECK_SECRET
 
 # Healthcheck - uses internal status check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

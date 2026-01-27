@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # FreeRADIUS config directory detection
 # Debian packages: /etc/freeradius/3.0/
@@ -26,6 +26,18 @@ for var in "${required_vars[@]}"; do
     fi
 done
 
+# Validate MYSQL_DBNAME format (alphanumeric and underscore only, prevent SQL injection)
+if [[ ! "$MYSQL_DBNAME" =~ ^[a-zA-Z0-9_]+$ ]]; then
+    echo "Error: MYSQL_DBNAME contains invalid characters. Only alphanumeric and underscore allowed." >&2
+    exit 1
+fi
+
+# Validate MYSQL_PORT is numeric
+if [[ ! "$MYSQL_PORT" =~ ^[0-9]+$ ]]; then
+    echo "Error: MYSQL_PORT must be numeric." >&2
+    exit 1
+fi
+
 # Set timezone if provided
 if [[ -n "$TZ" ]]; then
     ln -fs /usr/share/zoneinfo/"$TZ" /etc/localtime
@@ -38,7 +50,7 @@ echo "Starting FreeRADIUS 3.2.8 initialization..."
 echo "Waiting for MySQL to be ready..."
 mysql_ready=false
 for i in {1..30}; do
-    if MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -e "SELECT 1" &>/dev/null; then
+    if MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl --connect-timeout=5 -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -e "SELECT 1" &>/dev/null; then
         echo "MySQL is ready."
         mysql_ready=true
         break
@@ -55,7 +67,7 @@ fi
 # Function to check if schema already exists
 schema_exists() {
     local table_count
-    table_count=$(MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$MYSQL_DBNAME' AND table_name='radcheck';" 2>/dev/null || echo "0")
+    table_count=$(MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl --connect-timeout=10 -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$MYSQL_DBNAME' AND table_name='radcheck';" 2>/dev/null || echo "0")
     [[ "$table_count" -gt 0 ]]
 }
 
@@ -64,14 +76,14 @@ acquire_db_lock() {
     local lock_name="freeradius_init_lock"
     local lock_timeout=30
     local result
-    result=$(MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT GET_LOCK('$lock_name', $lock_timeout);" 2>/dev/null || echo "0")
+    result=$(MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl --connect-timeout=10 -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT GET_LOCK('$lock_name', $lock_timeout);" 2>/dev/null || echo "0")
     [[ "$result" == "1" ]]
 }
 
 # Function to release lock
 release_db_lock() {
     local lock_name="freeradius_init_lock"
-    MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT RELEASE_LOCK('$lock_name');" &>/dev/null || true
+    MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl --connect-timeout=10 -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT RELEASE_LOCK('$lock_name');" &>/dev/null || true
 }
 
 # Use local file lock for config modifications (per-container)
@@ -95,7 +107,9 @@ fi
 healthcheck_secret="${HEALTHCHECK_SECRET:-testing123}"
 if [[ -f "sites-available/status" ]]; then
     echo "Updating status server admin secret..."
-    sed -Ei "/client admin/,/\}/s/secret = .*/secret = ${healthcheck_secret}/" "sites-available/status"
+    # Escape special characters for sed replacement
+    escaped_healthcheck_secret=$(printf '%s\n' "$healthcheck_secret" | sed -e 's/[\/&]/\\&/g')
+    sed -Ei "/client admin/,/\}/s/secret = .*/secret = ${escaped_healthcheck_secret}/" "sites-available/status"
 fi
 
 # Only do full initialization if local lock doesn't exist
@@ -113,7 +127,7 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
                     echo "Schema was imported by another instance. Skipping."
                 else
                     echo "Importing default DB structure..."
-                    if ! MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" < mods-config/sql/main/mysql/schema.sql; then
+                    if ! MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl --connect-timeout=10 -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" < mods-config/sql/main/mysql/schema.sql; then
                         release_db_lock
                         echo "Failed to import DB structure. Exiting..." >&2
                         exit 1
@@ -143,14 +157,21 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
         # This is needed because the CA cert path doesn't exist
         sed -Ei '/mysql \{/,/^\t\}/ { /tls \{/,/^\t\t\}/ s/^/#/ }' mods-enabled/sql
 
+        # Escape special characters in environment variables for sed
+        escaped_mysql_host=$(printf '%s\n' "$MYSQL_HOST" | sed -e 's/[\/&|]/\\&/g')
+        escaped_mysql_port=$(printf '%s\n' "$MYSQL_PORT" | sed -e 's/[\/&|]/\\&/g')
+        escaped_mysql_user=$(printf '%s\n' "$MYSQL_USER" | sed -e 's/[\/&|]/\\&/g')
+        escaped_mysql_password=$(printf '%s\n' "$MYSQL_PASSWORD" | sed -e 's/[\/&|]/\\&/g')
+        escaped_mysql_dbname=$(printf '%s\n' "$MYSQL_DBNAME" | sed -e 's/[\/&|]/\\&/g')
+
         sed -Ei \
-            -e "s|^([[:space:]]*)#?[[:space:]]*server[[:space:]]*=.*|\1server = \"$MYSQL_HOST\"|" \
-            -e "s|^([[:space:]]*)#?[[:space:]]*port[[:space:]]*=.*|\1port = $MYSQL_PORT|" \
-            -e "s|^([[:space:]]*)#?[[:space:]]*login[[:space:]]*=.*|\1login = \"$MYSQL_USER\"|" \
-            -e "s|^([[:space:]]*)#?[[:space:]]*password[[:space:]]*=.*|\1password = \"$MYSQL_PASSWORD\"|" \
+            -e "s|^([[:space:]]*)#?[[:space:]]*server[[:space:]]*=.*|\1server = \"${escaped_mysql_host}\"|" \
+            -e "s|^([[:space:]]*)#?[[:space:]]*port[[:space:]]*=.*|\1port = ${escaped_mysql_port}|" \
+            -e "s|^([[:space:]]*)#?[[:space:]]*login[[:space:]]*=.*|\1login = \"${escaped_mysql_user}\"|" \
+            -e "s|^([[:space:]]*)#?[[:space:]]*password[[:space:]]*=.*|\1password = \"${escaped_mysql_password}\"|" \
             -e "s|dialect = \"sqlite\"|dialect = \"mysql\"|" \
             -e "s|driver = \"rlm_sql_[^\"]*\"|driver = \"rlm_sql_mysql\"|" \
-            -e "s|radius_db = \"radius\"|radius_db = \"$MYSQL_DBNAME\"|" \
+            -e "s|radius_db = \"radius\"|radius_db = \"${escaped_mysql_dbname}\"|" \
             -e 's|^[[:space:]]*#[[:space:]]*read_clients = yes|        read_clients = yes|' \
             -e 's|^[[:space:]]*#[[:space:]]*client_table = "nas"|        client_table = "nas"|' \
             mods-enabled/sql
@@ -158,20 +179,22 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
 
     # Add common private network ranges for container orchestration
     if [[ -f "sites-available/status" ]]; then
+        # Escape RADIUS_SECRET for config file
+        escaped_radius_secret=$(printf '%s\n' "$RADIUS_SECRET" | sed -e 's/[\/&]/\\&/g')
         cat <<EOT >> "${RADDB_DIR}/sites-available/status"
 
 # Container orchestration networks (Docker/Kubernetes)
 client container-networks {
     ipaddr = 10.0.0.0/8
-    secret = ${RADIUS_SECRET}
+    secret = ${escaped_radius_secret}
 }
 client docker-networks {
     ipaddr = 172.16.0.0/12
-    secret = ${RADIUS_SECRET}
+    secret = ${escaped_radius_secret}
 }
 client private-class-c {
     ipaddr = 192.168.0.0/16
-    secret = ${RADIUS_SECRET}
+    secret = ${escaped_radius_secret}
 }
 EOT
     fi
@@ -179,17 +202,48 @@ EOT
     # Add user-defined clients from RADIUS_CLIENTS environment variable
     if [[ -n "$RADIUS_CLIENTS" ]] && [[ -f "sites-available/status" ]]; then
         echo "Adding custom RADIUS clients..."
+
+        # Function to validate CIDR notation
+        validate_cidr() {
+            local cidr="$1"
+            # Match IPv4 CIDR: x.x.x.x/y or just x.x.x.x
+            if [[ "$cidr" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+                # Validate each octet is <= 255
+                IFS='/' read -r ip mask <<< "$cidr"
+                IFS='.' read -r -a octets <<< "$ip"
+                for octet in "${octets[@]}"; do
+                    if [[ "$octet" -gt 255 ]]; then
+                        return 1
+                    fi
+                done
+                # Validate mask is <= 32 if present
+                if [[ -n "$mask" ]] && [[ "$mask" -gt 32 ]]; then
+                    return 1
+                fi
+                return 0
+            fi
+            return 1
+        }
+
+        # Escape RADIUS_SECRET for config file
+        escaped_radius_secret=$(printf '%s\n' "$RADIUS_SECRET" | sed -e 's/[\/&]/\\&/g')
+
         IFS=',' read -ra CLIENT_ARRAY <<< "$RADIUS_CLIENTS"
         client_num=1
         for client_cidr in "${CLIENT_ARRAY[@]}"; do
             # Trim whitespace
             client_cidr=$(echo "$client_cidr" | xargs)
             if [[ -n "$client_cidr" ]]; then
+                # Validate CIDR format
+                if ! validate_cidr "$client_cidr"; then
+                    echo "  Warning: Invalid CIDR format, skipping: $client_cidr" >&2
+                    continue
+                fi
                 cat <<EOT >> "${RADDB_DIR}/sites-available/status"
 
 client custom-${client_num} {
     ipaddr = ${client_cidr}
-    secret = ${RADIUS_SECRET}
+    secret = ${escaped_radius_secret}
 }
 EOT
                 echo "  Added client: $client_cidr"

@@ -1,6 +1,6 @@
 #!/bin/bash
 # FreeRADIUS Database Backup Script
-set -e
+set -eo pipefail
 
 # Configuration
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
@@ -27,15 +27,38 @@ echo ""
 
 # Perform backup
 echo "Creating backup..."
-MYSQL_PWD="$MYSQL_PASSWORD" mysqldump \
-    -h"$MYSQL_HOST" \
+TEMP_BACKUP="$BACKUP_DIR/${BACKUP_FILE}.tmp"
+
+# Use a temporary file first to ensure atomic operation
+if ! MYSQL_PWD="$MYSQL_PASSWORD" mysqldump \
+    --connect-timeout=30 -h"$MYSQL_HOST" \
     -P"$MYSQL_PORT" \
     -u"$MYSQL_USER" \
     --single-transaction \
     --routines \
     --triggers \
     --add-drop-table \
-    "$MYSQL_DBNAME" | gzip > "$BACKUP_DIR/$BACKUP_FILE"
+    "$MYSQL_DBNAME" | gzip > "$TEMP_BACKUP"; then
+    echo "Error: mysqldump failed" >&2
+    rm -f "$TEMP_BACKUP"
+    exit 1
+fi
+
+# Verify backup file is not empty and is valid gzip
+if [[ ! -s "$TEMP_BACKUP" ]]; then
+    echo "Error: Backup file is empty" >&2
+    rm -f "$TEMP_BACKUP"
+    exit 1
+fi
+
+if ! gzip -t "$TEMP_BACKUP" 2>/dev/null; then
+    echo "Error: Backup file is corrupted (invalid gzip)" >&2
+    rm -f "$TEMP_BACKUP"
+    exit 1
+fi
+
+# Move temp file to final location (atomic on same filesystem)
+mv "$TEMP_BACKUP" "$BACKUP_DIR/$BACKUP_FILE"
 
 # Verify backup
 if [[ -f "$BACKUP_DIR/$BACKUP_FILE" ]]; then
@@ -46,8 +69,9 @@ else
     exit 1
 fi
 
-# Create latest symlink
-ln -sf "$BACKUP_FILE" "$BACKUP_DIR/latest.sql.gz"
+# Create latest symlink (atomic operation)
+ln -sf "$BACKUP_FILE" "$BACKUP_DIR/latest.sql.gz.tmp"
+mv "$BACKUP_DIR/latest.sql.gz.tmp" "$BACKUP_DIR/latest.sql.gz"
 
 # Cleanup old backups
 echo ""
