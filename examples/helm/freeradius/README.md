@@ -5,46 +5,105 @@ Helm chart for deploying FreeRADIUS with MySQL backend on Kubernetes.
 ## Prerequisites
 
 - Kubernetes 1.25+
+  - Local: Docker Desktop, Minikube, or Kind
+  - Cloud: GKE, EKS, AKS, etc.
 - Helm 3.x
-- FreeRADIUS image (default: `cepatkilatteknologi/freeradius:3.2.8`)
+- Storage provisioner for PersistentVolumes (if persistence enabled)
 
-## Installation
+## Quick Start
 
-### Quick Start (with bundled MySQL)
+### 1. Switch to Local Kubernetes Context (if needed)
 
 ```bash
-# From repository root
-helm install freeradius examples/helm/freeradius \
+# For Docker Desktop
+kubectl config use-context docker-desktop
+
+# For Minikube
+kubectl config use-context minikube
+
+# Verify cluster is running
+kubectl cluster-info
+```
+
+### 2. Install the Chart
+
+```bash
+# Basic installation with default values
+helm install freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --create-namespace
+
+# Or with custom secrets (recommended for production)
+helm install freeradius ./examples/helm/freeradius \
   --namespace freeradius \
   --create-namespace \
   --set freeradius.secret=YOUR_RADIUS_SECRET \
+  --set freeradius.healthcheckSecret=YOUR_HEALTHCHECK_SECRET \
   --set mysql.rootPassword=YOUR_ROOT_PASSWORD \
   --set mysql.password=YOUR_DB_PASSWORD
 ```
 
-### With External MySQL
+### 3. Wait for Pods to be Ready
 
 ```bash
-helm install freeradius examples/helm/freeradius \
-  --namespace freeradius \
-  --create-namespace \
-  --set mysql.enabled=false \
-  --set externalMysql.host=mysql.example.com \
-  --set externalMysql.password=YOUR_DB_PASSWORD \
-  --set freeradius.secret=YOUR_RADIUS_SECRET
+# Watch pods status
+kubectl get pods -n freeradius -w
+
+# Expected output (wait until all are Running and Ready):
+# NAME                          READY   STATUS    AGE
+# freeradius-xxxxx-xxxxx        1/1     Running   2m
+# freeradius-xxxxx-xxxxx        1/1     Running   2m
+# freeradius-mysql-0            1/1     Running   3m
 ```
 
-### Using values file
+### 4. Verify Installation
 
 ```bash
-# Copy and edit values
-cp values.yaml my-values.yaml
-# Edit my-values.yaml
+# Check Helm release
+helm list -n freeradius
 
-helm install freeradius examples/helm/freeradius \
-  --namespace freeradius \
-  --create-namespace \
-  -f my-values.yaml
+# Check all resources
+kubectl get all -n freeradius
+```
+
+## Services
+
+| Service | Type | Ports | Description |
+|---------|------|-------|-------------|
+| `freeradius` | LoadBalancer | 1812/UDP, 1813/UDP | RADIUS auth & accounting |
+| `freeradius-status` | ClusterIP | 18121/UDP | Health check endpoint |
+| `freeradius-mysql` | ClusterIP | 3306/TCP | MySQL database |
+| `freeradius-mysql-headless` | ClusterIP (None) | 3306/TCP | StatefulSet headless service |
+
+## Testing
+
+### Add Test User
+
+```bash
+# Get MySQL password from values (default: CHANGE_ME_STRONG_PASSWORD)
+kubectl exec -n freeradius freeradius-mysql-0 -- \
+  mysql -u radius -p'CHANGE_ME_STRONG_PASSWORD' radius -e \
+  "INSERT INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass') ON DUPLICATE KEY UPDATE value='testpass';"
+```
+
+### Test Authentication
+
+```bash
+# Test from inside the cluster (recommended)
+kubectl exec -n freeradius deploy/freeradius -- \
+  radtest testuser testpass 127.0.0.1 0 testing123
+
+# Expected output:
+# Received Access-Accept Id xxx from 127.0.0.1:1812
+```
+
+### Test from Local Machine
+
+If you have `radtest` installed locally:
+
+```bash
+# For LoadBalancer (Docker Desktop exposes on localhost)
+radtest testuser testpass localhost 0 YOUR_RADIUS_SECRET
 ```
 
 ## Configuration
@@ -57,12 +116,16 @@ helm install freeradius examples/helm/freeradius \
 | `freeradius.image.repository` | Image repository | `cepatkilatteknologi/freeradius` |
 | `freeradius.image.tag` | Image tag | `3.2.8` |
 | `freeradius.secret` | RADIUS shared secret | `CHANGE_ME_RADIUS_SECRET` |
+| `freeradius.healthcheckSecret` | Health check secret | `CHANGE_ME_HEALTHCHECK_SECRET` |
 | `freeradius.clients` | Additional clients (CIDR) | `""` |
 | `freeradius.service.type` | Service type | `LoadBalancer` |
-| `mysql.enabled` | Deploy MySQL | `true` |
+| `mysql.enabled` | Deploy bundled MySQL | `true` |
 | `mysql.rootPassword` | MySQL root password | `CHANGE_ME_ROOT_PASSWORD` |
 | `mysql.password` | MySQL user password | `CHANGE_ME_STRONG_PASSWORD` |
+| `mysql.persistence.enabled` | Enable persistence | `true` |
 | `mysql.persistence.size` | PVC size | `10Gi` |
+| `backup.enabled` | Enable backup CronJob | `true` |
+| `backup.schedule` | Backup schedule | `0 2 * * *` |
 
 ### External MySQL
 
@@ -74,15 +137,53 @@ helm install freeradius examples/helm/freeradius \
 | `externalMysql.user` | Database user | `radius` |
 | `externalMysql.password` | Database password | `""` |
 
+## Installation Options
+
+### With External MySQL
+
+```bash
+helm install freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --create-namespace \
+  --set mysql.enabled=false \
+  --set externalMysql.host=mysql.example.com \
+  --set externalMysql.password=YOUR_DB_PASSWORD \
+  --set freeradius.secret=YOUR_RADIUS_SECRET
+```
+
+### Without Persistence (for testing)
+
+```bash
+helm install freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --create-namespace \
+  --set mysql.persistence.enabled=false \
+  --set backup.enabled=false
+```
+
+### Using Values File
+
+```bash
+# Copy and edit values
+cp values.yaml my-values.yaml
+# Edit my-values.yaml with your settings
+
+helm install freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --create-namespace \
+  -f my-values.yaml
+```
+
 ## Examples
 
-### Production with HA MySQL
+### Production with External HA MySQL
 
 ```yaml
 # production-values.yaml
 freeradius:
   replicaCount: 3
-  secret: "super-secure-secret"
+  secret: "super-secure-radius-secret"
+  healthcheckSecret: "super-secure-healthcheck-secret"
   resources:
     requests:
       memory: "256Mi"
@@ -100,9 +201,12 @@ externalMysql:
   database: "radius"
   user: "radius"
   password: "db-password"
+
+backup:
+  enabled: false  # Handle backups externally
 ```
 
-### With Custom Clients
+### With Custom RADIUS Clients
 
 ```yaml
 freeradius:
@@ -118,30 +222,106 @@ freeradius:
     type: NodePort
 ```
 
+## Scaling
+
+```bash
+# Scale FreeRADIUS replicas
+kubectl scale deployment freeradius -n freeradius --replicas=3
+
+# Or via Helm upgrade
+helm upgrade freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --set freeradius.replicaCount=3
+```
+
 ## Upgrade
 
 ```bash
-helm upgrade freeradius examples/helm/freeradius \
+helm upgrade freeradius ./examples/helm/freeradius \
   --namespace freeradius \
   -f my-values.yaml
+```
+
+## Troubleshooting
+
+### Pods stuck in Pending state
+
+Check if PVC is bound (storage provisioner issue):
+
+```bash
+kubectl get pvc -n freeradius
+kubectl describe pvc -n freeradius
+```
+
+For local testing without proper storage provisioner:
+
+```bash
+helm upgrade freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --set mysql.persistence.enabled=false \
+  --set backup.enabled=false
+```
+
+### MySQL CrashLoopBackOff
+
+MySQL needs time for initial setup. The chart is configured with appropriate probe timing, but if issues persist:
+
+```bash
+# Check MySQL logs
+kubectl logs -n freeradius freeradius-mysql-0
+
+# Describe pod for events
+kubectl describe pod freeradius-mysql-0 -n freeradius
+```
+
+### Authentication fails with Access-Reject
+
+1. Verify user exists in database:
+   ```bash
+   kubectl exec -n freeradius freeradius-mysql-0 -- \
+     mysql -u radius -p'CHANGE_ME_STRONG_PASSWORD' radius -e "SELECT * FROM radcheck;"
+   ```
+
+2. Check FreeRADIUS logs:
+   ```bash
+   kubectl logs -n freeradius deploy/freeradius
+   ```
+
+### No response from RADIUS server
+
+1. Verify the client is configured
+2. Check if using correct shared secret
+3. Verify network connectivity
+
+### Debug FreeRADIUS
+
+```bash
+# Check container logs
+kubectl logs -n freeradius deploy/freeradius -f
+
+# Exec into container
+kubectl exec -n freeradius deploy/freeradius -it -- bash
+
+# Run FreeRADIUS in debug mode (stops normal service)
+kubectl exec -n freeradius deploy/freeradius -it -- radiusd -X
 ```
 
 ## Uninstall
 
 ```bash
+# Uninstall Helm release
 helm uninstall freeradius --namespace freeradius
-kubectl delete namespace freeradius  # Optional: remove namespace
+
+# Delete namespace (removes all resources including PVCs)
+kubectl delete namespace freeradius
 ```
 
-## Troubleshooting
+## Production Considerations
 
-```bash
-# Check pods
-kubectl -n freeradius get pods
-
-# Check logs
-kubectl -n freeradius logs -l app.kubernetes.io/name=freeradius
-
-# Debug FreeRADIUS
-kubectl -n freeradius exec -it deploy/freeradius -- radiusd -X
-```
+- Change all default passwords and secrets
+- Use external MySQL for high availability
+- Configure appropriate resource limits
+- Set up monitoring and alerting
+- Use proper TLS certificates
+- Configure network policies for security
+- Enable pod disruption budgets (enabled by default)
