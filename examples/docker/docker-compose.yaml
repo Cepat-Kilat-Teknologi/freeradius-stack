@@ -31,7 +31,7 @@ services:
           cpus: "1.0"
 
   freeradius:
-    image: ghcr.io/cepat-kilat-teknologi/freeradius:latest
+    image: cepatkilatteknologi/freeradius:latest
     container_name: freeradius
     depends_on:
       db:
