@@ -1,8 +1,21 @@
 #!/bin/bash
 set -e
 
-# FreeRADIUS config directory (source install uses /etc/raddb)
-RADDB_DIR="/etc/raddb"
+# FreeRADIUS config directory detection
+# Debian packages: /etc/freeradius/3.0/
+# Source install: /etc/raddb/
+if [[ -d "/etc/freeradius/3.0" ]]; then
+    RADDB_DIR="/etc/freeradius/3.0"
+elif [[ -d "/etc/freeradius" ]]; then
+    RADDB_DIR="/etc/freeradius"
+elif [[ -d "/etc/raddb" ]]; then
+    RADDB_DIR="/etc/raddb"
+else
+    echo "Error: Could not find FreeRADIUS config directory" >&2
+    exit 1
+fi
+
+echo "Using FreeRADIUS config directory: $RADDB_DIR"
 
 # Validate required environment variables
 required_vars=("MYSQL_HOST" "MYSQL_PORT" "MYSQL_USER" "MYSQL_PASSWORD" "MYSQL_DBNAME" "RADIUS_SECRET")
@@ -62,11 +75,18 @@ release_db_lock() {
 }
 
 # Use local file lock for config modifications (per-container)
+mkdir -p "${RADDB_DIR}/custom"
 LOCAL_LOCK_FILE="${RADDB_DIR}/custom/init.lock"
 
 # Only do initialization if local lock doesn't exist
 if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
     cd "$RADDB_DIR" || { echo "Failed to cd $RADDB_DIR"; exit 1; }
+
+    # Enable SQL module if not already enabled
+    if [[ -f "mods-available/sql" ]] && [[ ! -L "mods-enabled/sql" ]]; then
+        echo "Enabling SQL module..."
+        ln -sf "${RADDB_DIR}/mods-available/sql" "${RADDB_DIR}/mods-enabled/sql"
+    fi
 
     # Database schema import with distributed locking
     if [[ -z "$DO_NOT_IMPORT_DB" ]]; then
@@ -100,28 +120,35 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
     fi
 
     echo "Enabling SQL module in sites-enabled/default..."
-    sed -Ei 's/#[\t ]*sql$/sql/g' sites-enabled/default
+    if [[ -f "sites-enabled/default" ]]; then
+        sed -Ei 's/#[\t ]*sql$/sql/g' sites-enabled/default
+    fi
 
     echo "Updating SQL config with environment..."
-    sed -Ei \
-        -e "s|^([[:space:]]*)#?[[:space:]]*server[[:space:]]*=.*|\1server = \"$MYSQL_HOST\"|" \
-        -e "s|^([[:space:]]*)#?[[:space:]]*port[[:space:]]*=.*|\1port = $MYSQL_PORT|" \
-        -e "s|^([[:space:]]*)#?[[:space:]]*login[[:space:]]*=.*|\1login = \"$MYSQL_USER\"|" \
-        -e "s|^([[:space:]]*)#?[[:space:]]*password[[:space:]]*=.*|\1password = \"$MYSQL_PASSWORD\"|" \
-        -e "s|dialect = \"sqlite\"|dialect = \"mysql\"|" \
-        -e "s|driver = \"rlm_sql_[^\"]*\"|driver = \"rlm_sql_mysql\"|" \
-        -e "s|radius_db = \"radius\"|radius_db = \"$MYSQL_DBNAME\"|" \
-        -e 's|^[[:space:]]*#[[:space:]]*read_clients = yes|        read_clients = yes|' \
-        -e 's|^[[:space:]]*#[[:space:]]*client_table = "nas"|        client_table = "nas"|' \
-        mods-enabled/sql
+    if [[ -f "mods-enabled/sql" ]]; then
+        sed -Ei \
+            -e "s|^([[:space:]]*)#?[[:space:]]*server[[:space:]]*=.*|\1server = \"$MYSQL_HOST\"|" \
+            -e "s|^([[:space:]]*)#?[[:space:]]*port[[:space:]]*=.*|\1port = $MYSQL_PORT|" \
+            -e "s|^([[:space:]]*)#?[[:space:]]*login[[:space:]]*=.*|\1login = \"$MYSQL_USER\"|" \
+            -e "s|^([[:space:]]*)#?[[:space:]]*password[[:space:]]*=.*|\1password = \"$MYSQL_PASSWORD\"|" \
+            -e "s|dialect = \"sqlite\"|dialect = \"mysql\"|" \
+            -e "s|driver = \"rlm_sql_[^\"]*\"|driver = \"rlm_sql_mysql\"|" \
+            -e "s|radius_db = \"radius\"|radius_db = \"$MYSQL_DBNAME\"|" \
+            -e 's|^[[:space:]]*#[[:space:]]*read_clients = yes|        read_clients = yes|' \
+            -e 's|^[[:space:]]*#[[:space:]]*client_table = "nas"|        client_table = "nas"|' \
+            mods-enabled/sql
+    fi
 
     echo "Enabling Status Server..."
-    ln -sf "${RADDB_DIR}/sites-available/status" "${RADDB_DIR}/sites-enabled/status"
+    if [[ -f "sites-available/status" ]] && [[ ! -L "sites-enabled/status" ]]; then
+        ln -sf "${RADDB_DIR}/sites-available/status" "${RADDB_DIR}/sites-enabled/status"
+    fi
 
     # Add localhost client for internal healthcheck
     # Uses HEALTHCHECK_SECRET env var (defaults to testing123 if not set)
     healthcheck_secret="${HEALTHCHECK_SECRET:-testing123}"
-    cat <<EOT >> "${RADDB_DIR}/sites-available/status"
+    if [[ -f "sites-available/status" ]]; then
+        cat <<EOT >> "${RADDB_DIR}/sites-available/status"
 
 # Internal healthcheck client (localhost only)
 client localhost-healthcheck {
@@ -130,8 +157,8 @@ client localhost-healthcheck {
 }
 EOT
 
-    # Add common private network ranges for container orchestration
-    cat <<EOT >> "${RADDB_DIR}/sites-available/status"
+        # Add common private network ranges for container orchestration
+        cat <<EOT >> "${RADDB_DIR}/sites-available/status"
 
 # Container orchestration networks (Docker/Kubernetes)
 client container-networks {
@@ -147,9 +174,10 @@ client private-class-c {
     secret = ${RADIUS_SECRET}
 }
 EOT
+    fi
 
     # Add user-defined clients from RADIUS_CLIENTS environment variable
-    if [[ -n "$RADIUS_CLIENTS" ]]; then
+    if [[ -n "$RADIUS_CLIENTS" ]] && [[ -f "sites-available/status" ]]; then
         echo "Adding custom RADIUS clients..."
         IFS=',' read -ra CLIENT_ARRAY <<< "$RADIUS_CLIENTS"
         client_num=1
@@ -180,6 +208,6 @@ fi
 trap 'echo "Received shutdown signal, stopping FreeRADIUS..."; kill -TERM "$child" 2>/dev/null; wait "$child"' SIGTERM SIGINT
 
 echo "Starting FreeRADIUS 3.2.8..."
-radiusd -f &
+freeradius -f &
 child=$!
 wait "$child"
