@@ -35,11 +35,12 @@ COPY --chmod=755 scripts/entrypoint.sh /entrypoint.sh
 EXPOSE 1812/udp 1813/udp 18121/udp
 
 # Healthcheck secret (internal use only, localhost binding)
-ENV HEALTHCHECK_SECRET=testing123
+# Default matches the admin client secret in sites-available/status
+ENV HEALTHCHECK_SECRET=adminsecret
 
 # Healthcheck - uses internal status check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD radclient -t 3 -x 127.0.0.1:18121 status ${HEALTHCHECK_SECRET} < /dev/null 2>&1 | grep -q "Received" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD echo "Message-Authenticator = 0x00" | radclient -t 3 127.0.0.1:18121 status ${HEALTHCHECK_SECRET} 2>&1 | grep -q "Received" || exit 1
 
 # Graceful shutdown
 STOPSIGNAL SIGTERM
