@@ -17,7 +17,8 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 12
+      start_period: 120s
     logging:
       driver: "json-file"
       options:
@@ -30,7 +31,7 @@ services:
           cpus: "1.0"
 
   freeradius:
-    image: cepatkilatteknologi/freeradius:3.2.8
+    image: ghcr.io/cepat-kilat-teknologi/freeradius:latest
     container_name: freeradius
     depends_on:
       db:
@@ -51,7 +52,7 @@ services:
       - "1813:1813/udp"
       - "127.0.0.1:18121:18121/udp"
     volumes:
-      - radius_config:/etc/raddb/custom
+      - radius_config:/etc/freeradius/3.0/custom
     networks:
       - radius-internal
     logging:
