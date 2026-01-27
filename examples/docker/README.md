@@ -2,20 +2,25 @@
 
 Run FreeRADIUS with MySQL locally using Docker Compose.
 
+## Prerequisites
+
+- Docker Engine 20.10+
+- Docker Compose v2+
+
 ## Quick Start
 
 ```bash
-# 1. Create .env file
+# 1. Create .env file from template
 make init-env
 
-# 2. Edit .env - change all CHANGE_ME_* values
+# 2. Edit .env - IMPORTANT: change all CHANGE_ME_* values
 nano .env
 
-# 3. Pull and start
+# 3. Pull images and start services
 make pull
 make up
 
-# 4. Check status
+# 4. Wait for services to be ready, then check status
 make status
 make logs
 ```
@@ -76,3 +81,56 @@ TZ=Asia/Jakarta
 | 1812 | UDP | RADIUS Authentication |
 | 1813 | UDP | RADIUS Accounting |
 | 18121 | UDP | Status Server (localhost only) |
+
+## Backup & Restore
+
+```bash
+# Create backup
+make backup
+
+# List available backups
+make list-backups
+
+# Restore from backup
+make restore FILE=backups/radius_20260127_120000.sql.gz
+```
+
+Backups are stored in the `backups/` directory with automatic retention cleanup.
+
+## Troubleshooting
+
+### Services won't start
+
+```bash
+# Check logs
+make logs
+
+# Verify .env file exists and has correct values
+cat .env
+```
+
+### Authentication failing
+
+```bash
+# Verify user exists
+make mysql
+# Then run: SELECT * FROM radcheck WHERE username='testuser';
+
+# Check FreeRADIUS logs
+docker compose logs freeradius
+```
+
+### Health check failing
+
+```bash
+# Test status server manually
+docker compose exec freeradius sh -c \
+  'echo "Message-Authenticator = 0x00" | radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET'
+```
+
+## Security Notes
+
+- Change all `CHANGE_ME_*` values in `.env` before use
+- The `.env` file is excluded from git (see `.gitignore`)
+- Use strong, randomly generated passwords
+- RADIUS_CLIENTS are validated for proper CIDR format

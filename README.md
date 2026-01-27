@@ -113,18 +113,18 @@ freeradius-stack/
 
 ### Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `MYSQL_HOST` | MySQL server hostname | Yes |
-| `MYSQL_PORT` | MySQL server port | Yes |
-| `MYSQL_USER` | MySQL username | Yes |
-| `MYSQL_PASSWORD` | MySQL password | Yes |
-| `MYSQL_DBNAME` | MySQL database name | Yes |
-| `RADIUS_SECRET` | RADIUS shared secret | Yes |
-| `RADIUS_CLIENTS` | Additional clients (comma-separated CIDR) | No |
-| `TZ` | Timezone (e.g., `Asia/Jakarta`) | No |
-| `DO_NOT_IMPORT_DB` | Skip DB schema import if set | No |
-| `HEALTHCHECK_SECRET` | Secret for internal health checks (localhost only) | No |
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `MYSQL_HOST` | MySQL server hostname | Yes | - |
+| `MYSQL_PORT` | MySQL server port (numeric only) | Yes | - |
+| `MYSQL_USER` | MySQL username | Yes | - |
+| `MYSQL_PASSWORD` | MySQL password | Yes | - |
+| `MYSQL_DBNAME` | MySQL database name (alphanumeric + underscore only) | Yes | - |
+| `RADIUS_SECRET` | RADIUS shared secret | Yes | - |
+| `RADIUS_CLIENTS` | Additional clients (comma-separated CIDR, validated) | No | - |
+| `TZ` | Timezone (e.g., `Asia/Jakarta`) | No | `UTC` |
+| `DO_NOT_IMPORT_DB` | Skip DB schema import if set | No | - |
+| `HEALTHCHECK_SECRET` | Secret for internal health checks (localhost only) | No | `testing123` |
 
 ### Adding RADIUS Clients
 
@@ -369,12 +369,51 @@ docker exec freeradius sh -c 'echo "Message-Authenticator = 0x00" | radclient -t
 
 ## Security Considerations
 
-1. **Change all default secrets** before production deployment
-2. **Use strong passwords** for MySQL and RADIUS secrets
-3. **Restrict network access** to RADIUS ports (1812, 1813)
-4. **Status server (18121)** is bound to localhost by default
-5. **Use TLS** for MySQL connections in production
-6. **Regular updates** - rebuild images periodically for security patches
+### Required Before Production
+
+1. **Change all default secrets** - All `CHANGE_ME_*` values MUST be replaced with strong, randomly generated secrets:
+   ```bash
+   # Generate secure passwords
+   openssl rand -base64 32
+   ```
+
+2. **Use strong passwords** - MySQL and RADIUS secrets should be at least 32 characters
+
+3. **Validate input** - The entrypoint script validates:
+   - `MYSQL_DBNAME`: Only alphanumeric and underscore allowed
+   - `MYSQL_PORT`: Must be numeric
+   - `RADIUS_CLIENTS`: Must be valid CIDR notation
+
+### Network Security
+
+4. **Restrict network access** to RADIUS ports (1812, 1813):
+   - Use firewall rules to allow only trusted NAS devices
+   - For Kubernetes, use NetworkPolicies
+   - For cloud LoadBalancers, use internal LB annotations:
+     ```yaml
+     # GKE
+     annotations:
+       networking.gke.io/load-balancer-type: "Internal"
+     # AWS
+     annotations:
+       service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+     ```
+
+5. **Status server (18121)** is bound to localhost by default - used only for health checks
+
+### Database Security
+
+6. **Use TLS** for MySQL connections in production
+7. **Backup security** - Backup files contain sensitive data, secure the backup storage
+
+### Container Security
+
+8. **Security contexts** - Helm chart includes:
+   - Pod anti-affinity for high availability
+   - Dropped capabilities (only NET_BIND_SERVICE if needed)
+   - No privilege escalation
+
+9. **Regular updates** - Rebuild images periodically for security patches
 
 ## License
 
