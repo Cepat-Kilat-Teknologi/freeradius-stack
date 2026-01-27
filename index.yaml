@@ -1,3 +1,25 @@
 apiVersion: v1
-entries: {}
-generated: "2024-01-01T00:00:00Z"
+entries:
+  freeradius:
+  - apiVersion: v2
+    appVersion: 3.2.8
+    created: "2026-01-27T14:25:35.714606507Z"
+    description: A Helm chart for FreeRADIUS with MySQL backend
+    digest: b444c0f43c5b608320c64c0b7f00305cf5adbe57d47e9f6ccae10758c8f7d280
+    home: https://github.com/Cepat-Kilat-Teknologi/freeradius-stack
+    keywords:
+    - freeradius
+    - radius
+    - authentication
+    - mysql
+    maintainers:
+    - name: Cepat Kilat Teknologi
+      url: https://github.com/Cepat-Kilat-Teknologi
+    name: freeradius
+    sources:
+    - https://github.com/Cepat-Kilat-Teknologi/freeradius-stack
+    type: application
+    urls:
+    - https://cepat-kilat-teknologi.github.io/freeradius-stack/freeradius-1.0.0.tgz
+    version: 1.0.0
+generated: "2026-01-27T14:25:35.713886313Z"
