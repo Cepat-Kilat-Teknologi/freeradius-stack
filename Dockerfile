@@ -1,97 +1,33 @@
-# Build stage - compile FreeRADIUS 3.2.8 from source
-FROM debian:bookworm-slim AS builder
+# FreeRADIUS 3.2.x with MySQL backend
+# Using Debian trixie official packages
+ARG from=debian:trixie-slim
+FROM ${from}
 
-# FreeRADIUS version
-ARG FREERADIUS_VERSION=3.2.8
-ARG FREERADIUS_RELEASE_TAG=3_2_8
-
-# Install build dependencies
-RUN apt-get update -y && apt-get install --no-install-recommends -y \
-    build-essential \
-    ca-certificates \
-    curl \
-    libssl-dev \
-    libmariadb-dev \
-    libtalloc-dev \
-    libpcre2-dev \
-    libcap-dev \
-    libgdbm-dev \
-    libreadline-dev \
-    libsqlite3-dev \
-    libjson-c-dev \
-    libcurl4-openssl-dev \
-    libldap2-dev \
-    libpam0g-dev \
-    libperl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Download and extract FreeRADIUS source
-WORKDIR /tmp
-RUN curl -fsSL "https://github.com/FreeRADIUS/freeradius-server/releases/download/release_${FREERADIUS_RELEASE_TAG}/freeradius-server-${FREERADIUS_VERSION}.tar.gz" \
-    -o freeradius.tar.gz \
-    && tar -xzf freeradius.tar.gz \
-    && rm freeradius.tar.gz
-
-# Build FreeRADIUS
-WORKDIR /tmp/freeradius-server-${FREERADIUS_VERSION}
-RUN ./configure \
-    --prefix=/usr \
-    --sysconfdir=/etc \
-    --localstatedir=/var \
-    --with-mysql \
-    --with-threads \
-    --with-thread-pool \
-    --with-openssl \
-    --with-pcre2 \
-    --without-rlm_eap_ikev2 \
-    --without-rlm_eap_tnc \
-    --without-rlm_sql_oracle \
-    --without-rlm_sql_iodbc \
-    && make -j$(nproc) \
-    && make install DESTDIR=/freeradius-install
-
-# Runtime stage - minimal image
-FROM debian:bookworm-slim
+ARG DEBIAN_FRONTEND=noninteractive
 
 LABEL org.opencontainers.image.title="FreeRADIUS" \
-      org.opencontainers.image.description="FreeRADIUS 3.2.8 with MySQL backend" \
-      org.opencontainers.image.version="3.2.8" \
+      org.opencontainers.image.description="FreeRADIUS 3.2.x with MySQL backend" \
       org.opencontainers.image.source="https://github.com/Cepat-Kilat-Teknologi/freeradius-stack"
 
-# Install runtime dependencies
-RUN apt-get update -y && apt-get install --no-install-recommends -y \
-    libssl3 \
-    libmariadb3 \
-    libtalloc2 \
-    libpcre2-8-0 \
-    libcap2 \
-    libgdbm6 \
-    libreadline8 \
-    libsqlite3-0 \
-    libjson-c5 \
-    libcurl4 \
-    libldap-2.5-0 \
-    libpam0g \
+# Create freerad user and group with specific IDs
+ARG freerad_uid=101
+ARG freerad_gid=101
+
+RUN groupadd -g ${freerad_gid} -r freerad \
+    && useradd -u ${freerad_uid} -g freerad -r -M -d /etc/freeradius -s /usr/sbin/nologin freerad
+
+# Install FreeRADIUS and dependencies from Debian official repo
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    freeradius \
+    freeradius-mysql \
+    freeradius-utils \
     mariadb-client \
     tzdata \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy FreeRADIUS from builder
-COPY --from=builder /freeradius-install /
-
-# Create freerad user and group
-RUN groupadd -r freerad && useradd -r -g freerad freerad
-
-# Set correct permissions
-RUN chown -R freerad:freerad /etc/raddb /var/log/radius /var/run/radiusd 2>/dev/null || true \
-    && mkdir -p /etc/raddb/custom \
-    && chown freerad:freerad /etc/raddb/custom
-
-# Enable SQL module and disable TLS in SQL config
-RUN mkdir -p /etc/raddb/mods-enabled \
-    && ln -sf /etc/raddb/mods-available/sql /etc/raddb/mods-enabled/sql \
-    && sed -Ei '/^[\t\s#]*tls\s+\{/, /[\t\s#]*\}/ s/^/#/' /etc/raddb/mods-available/sql
+# Create symlink for raddb compatibility
+RUN ln -sf /etc/freeradius/3.0 /etc/raddb
 
 # Copy entrypoint and set permissions
 COPY --chmod=755 scripts/entrypoint.sh /entrypoint.sh
