@@ -125,7 +125,7 @@ spec:
               command:
                 - sh
                 - -c
-                - "radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET < /dev/null 2>&1 | grep -q Received"
+                - "echo 'Message-Authenticator = 0x00' | radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET 2>&1 | grep -q Received"
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 10
@@ -134,7 +134,7 @@ spec:
               command:
                 - sh
                 - -c
-                - "radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET < /dev/null 2>&1 | grep -q Received"
+                - "echo 'Message-Authenticator = 0x00' | radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET 2>&1 | grep -q Received"
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
