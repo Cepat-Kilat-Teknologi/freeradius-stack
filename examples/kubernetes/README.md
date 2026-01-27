@@ -5,48 +5,155 @@ Deploy FreeRADIUS with MySQL to Kubernetes using plain manifests.
 ## Prerequisites
 
 - Kubernetes cluster (1.25+)
-- kubectl configured
-- FreeRADIUS image available (build and push first)
+  - Local: Docker Desktop, Minikube, or Kind
+  - Cloud: GKE, EKS, AKS, etc.
+- kubectl configured and connected to cluster
+- Storage provisioner for PersistentVolumes (default StorageClass)
 
 ## Quick Start
 
-1. **Pull the image (or build your own):**
-   ```bash
-   # Pull from Docker Hub
-   docker pull cepatkilatteknologi/freeradius:3.2.8
+### 1. Switch to Local Kubernetes Context (if needed)
 
-   # Or build and push to your own registry
-   make build REGISTRY=your-registry.io/username
-   make push REGISTRY=your-registry.io/username
-   ```
+```bash
+# For Docker Desktop
+kubectl config use-context docker-desktop
 
-2. **Update image reference (optional):**
-   ```bash
-   # The default image is cepatkilatteknologi/freeradius:3.2.8
-   # To use GHCR instead, edit freeradius-deployment.yaml:
-   # image: ghcr.io/cepat-kilat-teknologi/freeradius:3.2.8
-   ```
+# For Minikube
+kubectl config use-context minikube
 
-3. **Update secrets:**
-   ```bash
-   # Edit secret.yaml - change all CHANGE_ME_* values
-   ```
+# For Kind
+kubectl config use-context kind-kind
 
-4. **Deploy:**
-   ```bash
-   kubectl apply -k .
-   # Or from root: make k8s-apply
-   ```
+# Verify cluster is running
+kubectl cluster-info
+```
 
-5. **Verify:**
-   ```bash
-   kubectl -n freeradius get pods
-   kubectl -n freeradius get svc
-   ```
+### 2. Update Secrets (Important!)
+
+Edit `secret.yaml` and change all default passwords:
+
+```bash
+# Generate secure passwords
+openssl rand -base64 32  # Use this for each password
+
+# Edit the secret file
+vi secret.yaml
+```
+
+Change these values:
+- `mysql-root-password`: MySQL root password
+- `mysql-password`: MySQL radius user password
+- `radius-secret`: RADIUS shared secret for NAS devices
+- `healthcheck-secret`: Secret for health check endpoint
+
+### 3. Configure RADIUS Clients (Optional)
+
+Edit `configmap.yaml` to add your NAS devices:
+
+```yaml
+RADIUS_CLIENTS: |
+  client mynas {
+    ipaddr = 192.168.1.0/24
+    secret = your-nas-secret
+  }
+```
+
+### 4. Deploy
+
+```bash
+# From this directory
+kubectl apply -k .
+
+# Or from project root
+make k8s-apply
+```
+
+### 5. Wait for Pods to be Ready
+
+```bash
+# Watch pods status
+kubectl get pods -n freeradius -w
+
+# Expected output (wait until all are Running and Ready):
+# NAME                          READY   STATUS    AGE
+# freeradius-xxxxx-xxxxx        1/1     Running   2m
+# freeradius-xxxxx-xxxxx        1/1     Running   2m
+# mysql-0                       1/1     Running   3m
+```
+
+### 6. Verify Deployment
+
+```bash
+# Check all resources
+kubectl get all -n freeradius
+
+# Check services
+kubectl get svc -n freeradius
+```
+
+## Services
+
+| Service | Type | Ports | Description |
+|---------|------|-------|-------------|
+| `freeradius` | LoadBalancer | 1812/UDP, 1813/UDP | RADIUS auth & accounting |
+| `freeradius-status` | ClusterIP | 18121/UDP | Health check endpoint |
+| `mysql` | ClusterIP | 3306/TCP | MySQL database |
+| `mysql-headless` | ClusterIP (None) | 3306/TCP | StatefulSet headless service |
+
+## Testing
+
+### Add Test User
+
+```bash
+# Get MySQL password from secret
+MYSQL_PASS=$(kubectl get secret freeradius-secret -n freeradius -o jsonpath='{.data.mysql-password}' | base64 -d)
+
+# Add test user
+kubectl exec -n freeradius mysql-0 -- mysql -u radius -p"$MYSQL_PASS" radius -e \
+  "INSERT INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass') ON DUPLICATE KEY UPDATE value='testpass';"
+```
+
+### Test Authentication
+
+```bash
+# Test from inside the cluster (recommended)
+kubectl exec -n freeradius deploy/freeradius -- radtest testuser testpass 127.0.0.1 0 testing123
+
+# Expected output:
+# Received Access-Accept Id xxx from 127.0.0.1:1812
+```
+
+### Test from Local Machine
+
+If you have `radtest` installed locally:
+
+```bash
+# Get RADIUS secret
+RADIUS_SECRET=$(kubectl get secret freeradius-secret -n freeradius -o jsonpath='{.data.radius-secret}' | base64 -d)
+
+# For LoadBalancer (Docker Desktop exposes on localhost)
+radtest testuser testpass localhost 0 "$RADIUS_SECRET"
+
+# For NodePort or port-forward
+kubectl -n freeradius port-forward svc/freeradius 1812:1812/udp &
+radtest testuser testpass localhost 0 "$RADIUS_SECRET"
+```
+
+## Files
+
+| File | Description |
+|------|-------------|
+| `namespace.yaml` | Namespace definition |
+| `secret.yaml` | Secrets (passwords) - **Edit before deploying!** |
+| `configmap.yaml` | Configuration (MySQL host, timezone, clients) |
+| `mysql-statefulset.yaml` | MySQL StatefulSet with PVC |
+| `freeradius-deployment.yaml` | FreeRADIUS Deployment (2 replicas) |
+| `backup-cronjob.yaml` | Scheduled backup CronJob |
+| `kustomization.yaml` | Kustomize configuration |
 
 ## Using External MySQL
 
-To use an external MySQL cluster:
+To use an external MySQL database instead of the bundled one:
 
 1. Edit `configmap.yaml`:
    ```yaml
@@ -56,7 +163,7 @@ To use an external MySQL cluster:
 
 2. Edit `secret.yaml` with external DB credentials
 
-3. Remove or skip `mysql-statefulset.yaml`:
+3. Deploy without MySQL StatefulSet:
    ```bash
    kubectl apply -f namespace.yaml
    kubectl apply -f secret.yaml
@@ -64,34 +171,84 @@ To use an external MySQL cluster:
    kubectl apply -f freeradius-deployment.yaml
    ```
 
-## Files
-
-| File | Description |
-|------|-------------|
-| `namespace.yaml` | Namespace definition |
-| `secret.yaml` | Secrets (passwords) |
-| `configmap.yaml` | Configuration |
-| `mysql-statefulset.yaml` | MySQL StatefulSet + Services |
-| `freeradius-deployment.yaml` | FreeRADIUS Deployment + Services |
-| `kustomization.yaml` | Kustomize configuration |
-
-## Testing
+## Scaling
 
 ```bash
-# Port forward for testing
-kubectl -n freeradius port-forward svc/freeradius 1812:1812/udp
+# Scale FreeRADIUS replicas
+kubectl scale deployment freeradius -n freeradius --replicas=3
 
-# Add test user (exec into mysql pod)
-kubectl -n freeradius exec -it mysql-0 -- mysql -uroot -p radius -e \
-  "INSERT INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass');"
+# Check status
+kubectl get pods -n freeradius
+```
 
-# Test auth
-radtest testuser testpass localhost 1812 YOUR_SECRET
+## Troubleshooting
+
+### Pods stuck in Init state
+
+FreeRADIUS pods wait for MySQL to be ready. Check MySQL status:
+
+```bash
+kubectl logs -n freeradius mysql-0
+kubectl describe pod mysql-0 -n freeradius
+```
+
+### Authentication fails with Access-Reject
+
+1. Verify user exists in database:
+   ```bash
+   kubectl exec -n freeradius mysql-0 -- mysql -u radius -p radius -e "SELECT * FROM radcheck;"
+   ```
+
+2. Check FreeRADIUS logs:
+   ```bash
+   kubectl logs -n freeradius deploy/freeradius
+   ```
+
+### No response from RADIUS server
+
+1. Verify the client is configured in `clients.conf` or `RADIUS_CLIENTS`
+2. Check if using correct shared secret
+3. Verify network connectivity and firewall rules
+
+### PVC pending
+
+Check if your cluster has a default StorageClass:
+
+```bash
+kubectl get storageclass
+```
+
+For local clusters without dynamic provisioning, you may need to create a PersistentVolume manually.
+
+### View FreeRADIUS debug logs
+
+```bash
+# Check container logs
+kubectl logs -n freeradius deploy/freeradius -f
+
+# Exec into container for debugging
+kubectl exec -n freeradius deploy/freeradius -it -- bash
 ```
 
 ## Cleanup
 
 ```bash
+# Delete all resources
 kubectl delete -k .
-# Or from root: make k8s-delete
+
+# Delete PVCs (data will be lost!)
+kubectl delete pvc -n freeradius --all
+
+# Or from project root
+make k8s-delete
 ```
+
+## Production Considerations
+
+- Change all default passwords in `secret.yaml`
+- Use proper TLS certificates for MySQL connections
+- Configure appropriate resource limits
+- Set up monitoring and alerting
+- Use external MySQL for high availability
+- Configure network policies for security
+- Enable pod disruption budgets for availability
