@@ -38,7 +38,7 @@ echo "Starting FreeRADIUS 3.2.8 initialization..."
 echo "Waiting for MySQL to be ready..."
 mysql_ready=false
 for i in {1..30}; do
-    if MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -e "SELECT 1" &>/dev/null; then
+    if MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -e "SELECT 1" &>/dev/null; then
         echo "MySQL is ready."
         mysql_ready=true
         break
@@ -55,7 +55,7 @@ fi
 # Function to check if schema already exists
 schema_exists() {
     local table_count
-    table_count=$(MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$MYSQL_DBNAME' AND table_name='radcheck';" 2>/dev/null || echo "0")
+    table_count=$(MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$MYSQL_DBNAME' AND table_name='radcheck';" 2>/dev/null || echo "0")
     [[ "$table_count" -gt 0 ]]
 }
 
@@ -64,29 +64,42 @@ acquire_db_lock() {
     local lock_name="freeradius_init_lock"
     local lock_timeout=30
     local result
-    result=$(MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT GET_LOCK('$lock_name', $lock_timeout);" 2>/dev/null || echo "0")
+    result=$(MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT GET_LOCK('$lock_name', $lock_timeout);" 2>/dev/null || echo "0")
     [[ "$result" == "1" ]]
 }
 
 # Function to release lock
 release_db_lock() {
     local lock_name="freeradius_init_lock"
-    MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT RELEASE_LOCK('$lock_name');" &>/dev/null || true
+    MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT RELEASE_LOCK('$lock_name');" &>/dev/null || true
 }
 
 # Use local file lock for config modifications (per-container)
 mkdir -p "${RADDB_DIR}/custom"
 LOCAL_LOCK_FILE="${RADDB_DIR}/custom/init.lock"
 
-# Only do initialization if local lock doesn't exist
-if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
-    cd "$RADDB_DIR" || { echo "Failed to cd $RADDB_DIR"; exit 1; }
+cd "$RADDB_DIR" || { echo "Failed to cd $RADDB_DIR"; exit 1; }
 
-    # Enable SQL module if not already enabled
-    if [[ -f "mods-available/sql" ]] && [[ ! -L "mods-enabled/sql" ]]; then
-        echo "Enabling SQL module..."
-        ln -sf "${RADDB_DIR}/mods-available/sql" "${RADDB_DIR}/mods-enabled/sql"
-    fi
+# Always ensure essential modules are enabled (sites-enabled can be reset on container recreate)
+if [[ -f "mods-available/sql" ]] && [[ ! -L "mods-enabled/sql" ]]; then
+    echo "Enabling SQL module..."
+    ln -sf "${RADDB_DIR}/mods-available/sql" "${RADDB_DIR}/mods-enabled/sql"
+fi
+
+if [[ -f "sites-available/status" ]] && [[ ! -L "sites-enabled/status" ]]; then
+    echo "Enabling Status Server..."
+    ln -sf "${RADDB_DIR}/sites-available/status" "${RADDB_DIR}/sites-enabled/status"
+fi
+
+# Always update admin client secret to match HEALTHCHECK_SECRET for healthcheck to work
+healthcheck_secret="${HEALTHCHECK_SECRET:-testing123}"
+if [[ -f "sites-available/status" ]]; then
+    echo "Updating status server admin secret..."
+    sed -Ei "/client admin/,/\}/s/secret = .*/secret = ${healthcheck_secret}/" "sites-available/status"
+fi
+
+# Only do full initialization if local lock doesn't exist
+if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
 
     # Database schema import with distributed locking
     if [[ -z "$DO_NOT_IMPORT_DB" ]]; then
@@ -100,7 +113,7 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
                     echo "Schema was imported by another instance. Skipping."
                 else
                     echo "Importing default DB structure..."
-                    if ! MYSQL_PWD="$MYSQL_PASSWORD" mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" < mods-config/sql/main/mysql/schema.sql; then
+                    if ! MYSQL_PWD="$MYSQL_PASSWORD" mysql --skip-ssl -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" < mods-config/sql/main/mysql/schema.sql; then
                         release_db_lock
                         echo "Failed to import DB structure. Exiting..." >&2
                         exit 1
@@ -126,6 +139,10 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
 
     echo "Updating SQL config with environment..."
     if [[ -f "mods-enabled/sql" ]]; then
+        # Comment out TLS section for MySQL (lines containing tls { to closing })
+        # This is needed because the CA cert path doesn't exist
+        sed -Ei '/mysql \{/,/^\t\}/ { /tls \{/,/^\t\t\}/ s/^/#/ }' mods-enabled/sql
+
         sed -Ei \
             -e "s|^([[:space:]]*)#?[[:space:]]*server[[:space:]]*=.*|\1server = \"$MYSQL_HOST\"|" \
             -e "s|^([[:space:]]*)#?[[:space:]]*port[[:space:]]*=.*|\1port = $MYSQL_PORT|" \
@@ -139,25 +156,8 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
             mods-enabled/sql
     fi
 
-    echo "Enabling Status Server..."
-    if [[ -f "sites-available/status" ]] && [[ ! -L "sites-enabled/status" ]]; then
-        ln -sf "${RADDB_DIR}/sites-available/status" "${RADDB_DIR}/sites-enabled/status"
-    fi
-
-    # Add localhost client for internal healthcheck
-    # Uses HEALTHCHECK_SECRET env var (defaults to testing123 if not set)
-    healthcheck_secret="${HEALTHCHECK_SECRET:-testing123}"
+    # Add common private network ranges for container orchestration
     if [[ -f "sites-available/status" ]]; then
-        cat <<EOT >> "${RADDB_DIR}/sites-available/status"
-
-# Internal healthcheck client (localhost only)
-client localhost-healthcheck {
-    ipaddr = 127.0.0.1
-    secret = ${healthcheck_secret}
-}
-EOT
-
-        # Add common private network ranges for container orchestration
         cat <<EOT >> "${RADDB_DIR}/sites-available/status"
 
 # Container orchestration networks (Docker/Kubernetes)
