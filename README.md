@@ -394,6 +394,8 @@ docker exec freeradius sh -c 'echo "Message-Authenticator = 0x00" | radclient -t
      # GKE
      annotations:
        networking.gke.io/load-balancer-type: "Internal"
+     ```
+     ```yaml
      # AWS
      annotations:
        service.beta.kubernetes.io/aws-load-balancer-internal: "true"
