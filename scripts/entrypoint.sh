@@ -179,22 +179,20 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
 
     # Add common private network ranges for container orchestration
     if [[ -f "sites-available/status" ]]; then
-        # Escape RADIUS_SECRET for config file
-        escaped_radius_secret=$(printf '%s\n' "$RADIUS_SECRET" | sed -e 's/[\/&]/\\&/g')
         cat <<EOT >> "${RADDB_DIR}/sites-available/status"
 
 # Container orchestration networks (Docker/Kubernetes)
 client container-networks {
     ipaddr = 10.0.0.0/8
-    secret = ${escaped_radius_secret}
+    secret = ${RADIUS_SECRET}
 }
 client docker-networks {
     ipaddr = 172.16.0.0/12
-    secret = ${escaped_radius_secret}
+    secret = ${RADIUS_SECRET}
 }
 client private-class-c {
     ipaddr = 192.168.0.0/16
-    secret = ${escaped_radius_secret}
+    secret = ${RADIUS_SECRET}
 }
 EOT
     fi
@@ -225,9 +223,6 @@ EOT
             return 1
         }
 
-        # Escape RADIUS_SECRET for config file
-        escaped_radius_secret=$(printf '%s\n' "$RADIUS_SECRET" | sed -e 's/[\/&]/\\&/g')
-
         IFS=',' read -ra CLIENT_ARRAY <<< "$RADIUS_CLIENTS"
         client_num=1
         for client_cidr in "${CLIENT_ARRAY[@]}"; do
@@ -243,7 +238,7 @@ EOT
 
 client custom-${client_num} {
     ipaddr = ${client_cidr}
-    secret = ${escaped_radius_secret}
+    secret = ${RADIUS_SECRET}
 }
 EOT
                 echo "  Added client: $client_cidr"
