@@ -127,7 +127,7 @@ freeradius-stack/
 | `MYSQL_USER` | MySQL username | Yes | - |
 | `MYSQL_PASSWORD` | MySQL password | Yes | - |
 | `MYSQL_DBNAME` | MySQL database name (alphanumeric + underscore only) | Yes | - |
-| `RADIUS_SECRET` | RADIUS shared secret | Yes | - |
+| `RADIUS_SECRET` | RADIUS shared secret (special characters supported) | Yes | - |
 | `RADIUS_CLIENTS` | Additional clients (comma-separated CIDR, validated) | No | - |
 | `TZ` | Timezone (e.g., `Asia/Jakarta`) | No | `UTC` |
 | `DO_NOT_IMPORT_DB` | Skip DB schema import if set | No | - |
@@ -367,6 +367,17 @@ docker exec freeradius freeradius -X
 # Then try authentication and watch the output
 ```
 
+### Authentication failing with special characters in secret
+
+If your `RADIUS_SECRET` contains special characters (e.g., `/`, `+`, `=` from base64), ensure you're using image version `3.2.8` or later. Earlier versions had a bug where special characters were incorrectly escaped.
+
+```bash
+# Verify the secret in FreeRADIUS config matches your RADIUS_SECRET
+docker exec freeradius grep -A2 "client container-networks" /etc/freeradius/3.0/sites-enabled/status
+
+# The secret should match RADIUS_SECRET exactly, without backslash escaping
+```
+
 ### Health check failing
 
 ```bash
@@ -384,7 +395,7 @@ docker exec freeradius sh -c 'echo "Message-Authenticator = 0x00" | radclient -t
    openssl rand -base64 32
    ```
 
-2. **Use strong passwords** - MySQL and RADIUS secrets should be at least 32 characters
+2. **Use strong passwords** - MySQL and RADIUS secrets should be at least 32 characters. Special characters (including `/`, `+`, `=` from base64) are fully supported
 
 3. **Validate input** - The entrypoint script validates:
    - `MYSQL_DBNAME`: Only alphanumeric and underscore allowed

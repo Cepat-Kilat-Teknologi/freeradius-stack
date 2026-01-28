@@ -245,7 +245,7 @@ make k8s-delete
 
 ## Production Considerations
 
-- Change all default passwords in `secret.yaml`
+- Change all default passwords in `secret.yaml` (special characters like `/`, `+`, `=` from base64 are supported)
 - Use proper TLS certificates for MySQL connections
 - Configure appropriate resource limits
 - Set up monitoring and alerting

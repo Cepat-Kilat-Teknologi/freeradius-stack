@@ -353,7 +353,7 @@ kubectl delete namespace freeradius
 
 ## Production Considerations
 
-- Change all default passwords and secrets
+- Change all default passwords and secrets (special characters like `/`, `+`, `=` from base64 are supported)
 - Use external MySQL for high availability
 - Configure appropriate resource limits
 - Set up monitoring and alerting

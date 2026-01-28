@@ -132,5 +132,5 @@ docker compose exec freeradius sh -c \
 
 - Change all `CHANGE_ME_*` values in `.env` before use
 - The `.env` file is excluded from git (see `.gitignore`)
-- Use strong, randomly generated passwords
+- Use strong, randomly generated passwords (special characters like `/`, `+`, `=` are supported)
 - RADIUS_CLIENTS are validated for proper CIDR format
