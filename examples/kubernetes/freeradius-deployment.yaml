@@ -8,6 +8,10 @@ metadata:
     app.kubernetes.io/component: radius-server
 spec:
   type: LoadBalancer
+  # Uncomment to restrict source IPs (recommended for production):
+  # loadBalancerSourceRanges:
+  #   - 10.0.0.0/8
+  #   - 192.168.0.0/16
   ports:
     - port: 1812
       targetPort: 1812
@@ -63,15 +67,40 @@ spec:
         app.kubernetes.io/component: radius-server
     spec:
       terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: freeradius
+      securityContext:
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: wait-for-mysql
           image: busybox:1.36
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop: ["ALL"]
           command:
             - sh
             - -c
             - |
+              TIMEOUT=300
+              elapsed=0
+              echo "Waiting for MySQL (timeout: ${TIMEOUT}s)..."
               until nc -z mysql 3306; do
-                echo "Waiting for MySQL..."
+                elapsed=$((elapsed + 2))
+                if [ $elapsed -ge $TIMEOUT ]; then
+                  echo "ERROR: MySQL not ready after ${TIMEOUT}s"
+                  exit 1
+                fi
+                echo "  Waiting ($elapsed/${TIMEOUT}s)..."
                 sleep 2
               done
               echo "MySQL is ready"
@@ -135,6 +164,10 @@ spec:
                 secretKeyRef:
                   name: freeradius-secret
                   key: healthcheck-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           resources:
             requests:
               memory: "128Mi"

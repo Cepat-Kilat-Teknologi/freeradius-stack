@@ -9,6 +9,8 @@ on:
   workflow_dispatch:
 
 env:
+  # FreeRADIUS version - update when Debian package changes
+  # Actual version is verified post-build
   IMAGE_VERSION: "3.2.8"
   # Docker Hub
   DOCKERHUB_REGISTRY: docker.io
@@ -88,6 +90,35 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Scan for vulnerabilities
+      - name: Scan for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
+          image-ref: ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE }}:${{ env.IMAGE_VERSION }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+      # Detect actual FreeRADIUS version from built image
+      - name: Detect FreeRADIUS version
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          # Extract version from the amd64 image
+          VERSION=$(docker run --rm --platform linux/amd64 ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE }}:${{ env.IMAGE_VERSION }} freeradius -v 2>/dev/null | grep -oP 'FreeRADIUS Version \K[0-9]+\.[0-9]+\.[0-9]+' || echo "${{ env.IMAGE_VERSION }}")
+          echo "Detected FreeRADIUS version: $VERSION"
+          if [ "$VERSION" != "${{ env.IMAGE_VERSION }}" ]; then
+            echo "::warning::IMAGE_VERSION (${{ env.IMAGE_VERSION }}) does not match actual FreeRADIUS version ($VERSION). Update IMAGE_VERSION in ci.yml."
+          fi
+
       # Generate artifact attestation for Docker Hub
       - name: Generate attestation (Docker Hub)
         uses: actions/attest-build-provenance@v2
@@ -123,3 +154,77 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Digest:** \`${{ steps.build-push.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+
+  # ========================
+  # Job 2: Test Docker Image
+  # ========================
+  test:
+    name: Test Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          tags: freeradius:test
+          cache-from: type=gha
+
+      - name: Start services
+        working-directory: examples/docker
+        run: |
+          # Create test .env
+          cat > .env <<'EOF'
+          MYSQL_USER=radius
+          MYSQL_PASSWORD=testpass123
+          MYSQL_HOST=db
+          MYSQL_PORT=3306
+          MYSQL_DBNAME=radius
+          MYSQL_ROOT_PASSWORD=rootpass123
+          RADIUS_SECRET=testsecret123
+          HEALTHCHECK_SECRET=healthcheck123
+          TZ=UTC
+          RADIUS_ALLOW_PRIVATE_NETWORKS=true
+          EOF
+
+          # Override image in compose
+          FREERADIUS_IMAGE=freeradius:test docker compose up -d
+
+      - name: Wait for services
+        working-directory: examples/docker
+        run: |
+          echo "Waiting for services to be healthy..."
+          for i in $(seq 1 60); do
+            if docker compose ps | grep -q "healthy"; then
+              echo "Services are healthy"
+              break
+            fi
+            echo "  Waiting ($i/60)..."
+            sleep 5
+          done
+          docker compose ps
+
+      - name: Test RADIUS authentication
+        working-directory: examples/docker
+        run: |
+          # Add test user
+          docker compose exec -T db mysql -uroot -prootpass123 radius -e \
+            "INSERT INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass') ON DUPLICATE KEY UPDATE value='testpass';"
+
+          # Test auth
+          docker compose exec -T freeradius radtest testuser testpass localhost 0 testsecret123
+
+      - name: Cleanup
+        if: always()
+        working-directory: examples/docker
+        run: docker compose down -v --remove-orphans

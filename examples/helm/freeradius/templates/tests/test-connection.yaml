@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "freeradius.fullname" . }}-test-connection
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+    - name: radius-test
+      image: "{{ .Values.freeradius.image.repository }}:{{ .Values.freeradius.image.tag }}"
+      command:
+        - sh
+        - -c
+        - |
+          echo "Testing RADIUS status server..."
+          echo "Message-Authenticator = 0x00" | radclient -t 5 {{ include "freeradius.fullname" . }}:18121 status $HEALTHCHECK_SECRET 2>&1 | grep -q "Received"
+          if [ $? -eq 0 ]; then
+            echo "PASSED: RADIUS status server responding"
+            exit 0
+          else
+            echo "FAILED: RADIUS status server not responding"
+            exit 1
+          fi
+      env:
+        - name: HEALTHCHECK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "freeradius.fullname" . }}
+              key: healthcheck-secret
+  restartPolicy: Never

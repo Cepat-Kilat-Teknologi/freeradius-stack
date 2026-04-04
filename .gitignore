@@ -6,3 +6,7 @@
 backups/
 .helm-packages/
 *.tgz
+
+# Database dumps (prevent accidental commit of sensitive data)
+**/*.sql.gz
+**/*.sql

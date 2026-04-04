@@ -10,6 +10,8 @@ resources:
   - mysql-statefulset.yaml
   - freeradius-deployment.yaml
   - backup-cronjob.yaml
+  - networkpolicy.yaml
+  - pdb.yaml
 
 labels:
   - pairs:

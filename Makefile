@@ -1,4 +1,4 @@
-.PHONY: help build push docker-up docker-down k8s-apply k8s-delete helm-install helm-uninstall
+.PHONY: help build push build-multiarch push-multiarch docker-up docker-down k8s-apply k8s-delete helm-install helm-uninstall
 
 # Configuration
 IMAGE_NAME ?= freeradius
@@ -21,6 +21,8 @@ help:
 	@echo "  make build TAG=v1.0.0         - Build with specific tag"
 	@echo "  make push                     - Push to registry"
 	@echo "  make push REGISTRY=ghcr.io/user - Push to specific registry"
+	@echo "  make build-multiarch          - Build multi-arch image (amd64+arm64)"
+	@echo "  make push-multiarch           - Build and push multi-arch image"
 	@echo ""
 	@echo "Docker Compose (examples/docker/):"
 	@echo "  make docker-up                - Start with Docker Compose"
@@ -51,6 +53,14 @@ build-no-cache:
 push: build
 	docker push $(FULL_IMAGE)
 	@echo "Pushed: $(FULL_IMAGE)"
+
+build-multiarch:
+	docker buildx build --platform linux/amd64,linux/arm64 -t $(FULL_IMAGE) .
+	@echo "Built multiarch: $(FULL_IMAGE)"
+
+push-multiarch:
+	docker buildx build --platform linux/amd64,linux/arm64 -t $(FULL_IMAGE) --push .
+	@echo "Pushed multiarch: $(FULL_IMAGE)"
 
 tag:
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)

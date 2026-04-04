@@ -11,6 +11,10 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.freeradius.service.type }}
+  {{- with .Values.freeradius.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   ports:
     - port: {{ .Values.freeradius.service.ports.auth }}
       targetPort: radius-auth

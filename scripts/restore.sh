@@ -14,6 +14,19 @@ for var in MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DBNAME; do
     fi
 done
 
+# Create MySQL credentials file to avoid deprecated MYSQL_PWD env var
+create_mysql_creds() {
+    local creds_file="/tmp/.mysql-creds-$$"
+    cat > "$creds_file" <<CREDS
+[client]
+password=${MYSQL_PASSWORD}
+CREDS
+    chmod 600 "$creds_file"
+    echo "$creds_file"
+}
+MYSQL_CREDS_FILE=$(create_mysql_creds)
+trap 'rm -f "$MYSQL_CREDS_FILE"' EXIT
+
 # Resolve backup file path
 if [[ "$BACKUP_FILE" != /* ]]; then
     BACKUP_FILE="$BACKUP_DIR/$BACKUP_FILE"
@@ -40,6 +53,9 @@ if [[ -t 0 ]]; then
         echo "Restore cancelled."
         exit 0
     fi
+elif [[ "${1:-}" != "--force" ]] && [[ "${2:-}" != "--force" ]]; then
+    echo "Error: Non-interactive mode requires --force flag" >&2
+    exit 1
 fi
 
 # Verify backup file integrity before restore
@@ -55,7 +71,7 @@ fi
 # Perform restore
 echo "Restoring database..."
 if [[ "$BACKUP_FILE" == *.gz ]]; then
-    if ! gunzip -c "$BACKUP_FILE" | MYSQL_PWD="$MYSQL_PASSWORD" mysql \
+    if ! gunzip -c "$BACKUP_FILE" | mysql --defaults-extra-file="$MYSQL_CREDS_FILE" \
         --connect-timeout=30 -h"$MYSQL_HOST" \
         -P"$MYSQL_PORT" \
         -u"$MYSQL_USER" \
@@ -64,7 +80,7 @@ if [[ "$BACKUP_FILE" == *.gz ]]; then
         exit 1
     fi
 else
-    if ! MYSQL_PWD="$MYSQL_PASSWORD" mysql \
+    if ! mysql --defaults-extra-file="$MYSQL_CREDS_FILE" \
         --connect-timeout=30 -h"$MYSQL_HOST" \
         -P"$MYSQL_PORT" \
         -u"$MYSQL_USER" \

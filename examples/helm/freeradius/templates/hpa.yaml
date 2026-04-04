@@ -1,0 +1,28 @@
+{{- if .Values.freeradius.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "freeradius.fullname" . }}
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "freeradius.fullname" . }}
+  minReplicas: {{ .Values.freeradius.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.freeradius.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.freeradius.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.freeradius.autoscaling.targetMemoryUtilizationPercentage }}
+{{- end }}

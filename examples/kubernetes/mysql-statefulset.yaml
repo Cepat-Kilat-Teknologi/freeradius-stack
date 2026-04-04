@@ -85,6 +85,10 @@ spec:
                 configMapKeyRef:
                   name: freeradius-config
                   key: TZ
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           resources:
             requests:
               memory: "256Mi"
@@ -95,13 +99,21 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/mysql
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "mysqladmin ping -h localhost 2>/dev/null || mariadb-admin ping -h localhost 2>/dev/null"
+            failureThreshold: 30
+            periodSeconds: 10
           livenessProbe:
             exec:
               command:
                 - sh
                 - -c
                 - "mysqladmin ping -h localhost 2>/dev/null || mariadb-admin ping -h localhost 2>/dev/null"
-            initialDelaySeconds: 60
+            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3

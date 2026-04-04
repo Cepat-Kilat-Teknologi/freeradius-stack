@@ -79,6 +79,17 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+Secret name (supports existingSecret)
+*/}}
+{{- define "freeradius.secretName" -}}
+{{- if .Values.freeradius.existingSecret }}
+{{- .Values.freeradius.existingSecret }}
+{{- else }}
+{{- include "freeradius.fullname" . }}
+{{- end }}
+{{- end }}
+
+{{/*
 MySQL host
 */}}
 {{- define "freeradius.mysql.host" -}}

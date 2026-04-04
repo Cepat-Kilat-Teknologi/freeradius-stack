@@ -1,8 +1,17 @@
 # FreeRADIUS Helm Chart Values
 
+# Override chart name
+nameOverride: ""
+# Override full release name
+fullnameOverride: ""
+
 # Global settings
 global:
   timezone: "Asia/Jakarta"
+
+# Image pull secrets for private registries
+imagePullSecrets: []
+# - name: my-registry-secret
 
 # FreeRADIUS configuration
 freeradius:
@@ -21,12 +30,21 @@ freeradius:
   # Used for status server health probes
   healthcheckSecret: "CHANGE_ME_HEALTHCHECK_SECRET"
 
+  # Use an existing secret instead of creating one
+  # If set, the chart will not create a Secret resource
+  existingSecret: ""
+
   # Additional RADIUS clients (comma-separated CIDR)
   # Example: "10.42.0.0/16,192.168.1.0/24"
   clients: ""
 
   service:
     type: LoadBalancer
+    # Restrict source IPs (recommended for production):
+    # loadBalancerSourceRanges:
+    #   - 10.0.0.0/8
+    #   - 192.168.0.0/16
+    loadBalancerSourceRanges: []
     ports:
       auth: 1812
       acct: 1813
@@ -49,6 +67,30 @@ freeradius:
     enabled: true
     minAvailable: 1
 
+  # Autoscaling (HPA)
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  # Additional environment variables
+  extraEnv: []
+  # - name: MY_VAR
+  #   value: "my-value"
+
+  # Additional volumes
+  extraVolumes: []
+  # - name: my-volume
+  #   configMap:
+  #     name: my-config
+
+  # Additional volume mounts
+  extraVolumeMounts: []
+  # - name: my-volume
+  #   mountPath: /etc/my-config
+
 # MySQL configuration
 mysql:
   # Set to false to use external MySQL
@@ -65,6 +107,9 @@ mysql:
   database: "radius"
   user: "radius"
   password: "CHANGE_ME_STRONG_PASSWORD"
+
+  # Use an existing secret for MySQL credentials
+  existingSecret: ""
 
   persistence:
     enabled: true
@@ -88,6 +133,8 @@ externalMysql:
   user: "radius"
   # Password should be set via --set or values file
   password: ""
+  # Use an existing secret for external MySQL password
+  existingSecret: ""
 
 # Service account
 serviceAccount:
@@ -138,7 +185,7 @@ backup:
     success: 3
     failed: 3
 
-  # Backup image (MariaDB client)
+  # Backup image (MariaDB client is compatible with both MySQL and MariaDB servers)
   image:
     repository: mariadb
     tag: "11"
@@ -158,3 +205,14 @@ backup:
     limits:
       memory: "256Mi"
       cpu: "500m"
+
+# Network policies
+networkPolicy:
+  enabled: false
+
+# Metrics and monitoring
+metrics:
+  serviceMonitor:
+    enabled: false
+    interval: "30s"
+    labels: {}
