@@ -32,6 +32,14 @@ kubectl cluster-info
 
 Edit `secret.yaml` and change all default passwords:
 
+```
+# WARNING: Do NOT commit this file with real values!
+# For production, use:
+#   - kubectl create secret generic freeradius-secret --from-literal=...
+#   - External Secrets Operator
+#   - Sealed Secrets
+```
+
 ```bash
 # Generate secure passwords
 openssl rand -base64 32  # Use this for each password
@@ -100,6 +108,12 @@ kubectl get svc -n freeradius
 | `mysql` | ClusterIP | 3306/TCP | MySQL database |
 | `mysql-headless` | ClusterIP (None) | 3306/TCP | StatefulSet headless service |
 
+```yaml
+# Restrict source IPs (recommended for production):
+# loadBalancerSourceRanges:
+#   - 10.0.0.0/8
+```
+
 ## Testing
 
 ### Add Test User
@@ -149,6 +163,8 @@ radtest testuser testpass localhost 0 "$RADIUS_SECRET"
 | `mysql-statefulset.yaml` | MySQL StatefulSet with PVC |
 | `freeradius-deployment.yaml` | FreeRADIUS Deployment (2 replicas) |
 | `backup-cronjob.yaml` | Scheduled backup CronJob |
+| `networkpolicy.yaml` | NetworkPolicy for MySQL and RADIUS traffic isolation |
+| `pdb.yaml` | PodDisruptionBudget for FreeRADIUS |
 | `kustomization.yaml` | Kustomize configuration |
 
 ## Using External MySQL
@@ -180,6 +196,17 @@ kubectl scale deployment freeradius -n freeradius --replicas=3
 # Check status
 kubectl get pods -n freeradius
 ```
+
+## Security
+
+- **SecurityContext** on all containers (capabilities dropped, no privilege escalation)
+- **NetworkPolicy** restricts MySQL to FreeRADIUS and backup pods only
+- **Pod Security Standards** labels on namespace (`enforce: baseline`, `warn: restricted`)
+- **PodDisruptionBudget** ensures minimum 1 pod during maintenance
+- **topologySpreadConstraints** spread pods across nodes
+- **CHANGE_ME_* rejection** -- deployment fails if placeholder secrets are used
+- Init container has a **300s timeout** (won't hang forever)
+- MySQL has a **startupProbe** (5-minute window for slow first boot)
 
 ## Troubleshooting
 
@@ -230,6 +257,15 @@ kubectl logs -n freeradius deploy/freeradius -f
 kubectl exec -n freeradius deploy/freeradius -it -- bash
 ```
 
+### Debug Mode
+
+```bash
+# Enable debug mode
+kubectl set env deployment/freeradius RADIUS_DEBUG=1 -n freeradius
+kubectl rollout restart deployment/freeradius -n freeradius
+kubectl logs -f deploy/freeradius -n freeradius
+```
+
 ## Cleanup
 
 ```bash
@@ -250,5 +286,9 @@ make k8s-delete
 - Configure appropriate resource limits
 - Set up monitoring and alerting
 - Use external MySQL for high availability
-- Configure network policies for security
-- Enable pod disruption budgets for availability
+- NetworkPolicy is included by default for pod isolation
+- PDB ensures high availability during cluster maintenance
+- Container security: non-root execution, dropped capabilities
+- MySQL TLS supported via environment variables
+- StartupProbe prevents premature MySQL pod termination
+- topologySpreadConstraints for multi-zone spreading

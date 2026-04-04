@@ -13,6 +13,13 @@ Production-ready FreeRADIUS deployment with MySQL backend. Supports Docker Compo
 - **Health checks** for container orchestration
 - **Log rotation** to prevent disk bloat
 - **CI/CD** with GitHub Actions
+- **Security hardened** containers (non-root, capability drop, no-new-privileges)
+- **NetworkPolicy** for pod traffic isolation
+- **MySQL TLS** support for encrypted database connections
+- **Backup encryption** with GPG
+- **Debug mode** via environment variable
+- **MariaDB support** as alternative database
+- **Vulnerability scanning** in CI pipeline
 
 ## Docker Images
 
@@ -85,6 +92,15 @@ helm install freeradius examples/helm/freeradius \
   --set freeradius.secret=YOUR_RADIUS_SECRET
 ```
 
+#### Helm Chart Features
+
+- **`existingSecret`** support for external secret management (e.g., Sealed Secrets, External Secrets Operator)
+- **HPA (autoscaling)** support for automatic replica scaling based on CPU/memory
+- **ServiceMonitor** for Prometheus metrics collection
+- **NetworkPolicy** template for pod traffic isolation
+- **Helm tests** -- validate deployment with `helm test freeradius`
+- **`imagePullSecrets`** for pulling from private container registries
+
 ## Project Structure
 
 ```
@@ -108,12 +124,20 @@ freeradius-stack/
     │   ├── configmap.yaml
     │   ├── mysql-statefulset.yaml
     │   ├── freeradius-deployment.yaml
-    │   └── kustomization.yaml
+    │   ├── kustomization.yaml
+    │   ├── networkpolicy.yaml
+    │   └── pdb.yaml
     └── helm/freeradius/          # Helm chart
         ├── Chart.yaml
+        ├── .helmignore
         ├── values.yaml            # Production values
         ├── values-local.yaml      # Local development (faster)
         └── templates/
+            ├── NOTES.txt
+            ├── hpa.yaml
+            ├── networkpolicy.yaml
+            ├── servicemonitor.yaml
+            └── tests/
 ```
 
 ## Configuration
@@ -132,6 +156,14 @@ freeradius-stack/
 | `TZ` | Timezone (e.g., `Asia/Jakarta`) | No | `UTC` |
 | `DO_NOT_IMPORT_DB` | Skip DB schema import if set | No | - |
 | `HEALTHCHECK_SECRET` | Secret for internal health checks (localhost only) | No | `testing123` |
+| `RADIUS_ALLOW_PRIVATE_NETWORKS` | Add RFC 1918 ranges as RADIUS clients | No | `true` |
+| `RADIUS_DEBUG` | Enable FreeRADIUS debug mode (-X) | No | - |
+| `MYSQL_TLS_CA` | Path to MySQL CA certificate | No | - |
+| `MYSQL_TLS_CERT` | Path to MySQL client certificate | No | - |
+| `MYSQL_TLS_KEY` | Path to MySQL client key | No | - |
+| `BACKUP_ENCRYPT_KEY` | GPG passphrase for backup encryption | No | - |
+| `DB_IMAGE` | Database image (Docker Compose) | No | `mysql:8.4` |
+| `FREERADIUS_IMAGE` | FreeRADIUS image override (Docker Compose) | No | `cepatkilatteknologi/freeradius:latest` |
 
 ### Adding RADIUS Clients
 
@@ -166,7 +198,7 @@ VALUES ('john', 'Tunnel-Type', ':=', 'VLAN'),
 |------|----------|-------------|
 | 1812 | UDP | RADIUS Authentication |
 | 1813 | UDP | RADIUS Accounting |
-| 18121 | UDP | Status Server (monitoring) |
+| 18121 | UDP | Status Server (localhost only, not exposed in Dockerfile) |
 
 ## Commands
 
@@ -178,6 +210,8 @@ make help              # Show all commands
 # Image
 make build             # Build Docker image
 make push REGISTRY=x   # Push to registry
+make build-multiarch   # Build multi-arch image (amd64+arm64)
+make push-multiarch    # Build and push multi-arch image
 
 # Docker Compose
 make docker-up         # Start services
@@ -245,6 +279,10 @@ cd examples/docker
 make backup
 # Creates: backups/radius_YYYYMMDD_HHMMSS.sql.gz
 
+# Create an encrypted backup (set BACKUP_ENCRYPT_KEY in .env)
+BACKUP_ENCRYPT_KEY=my-secret-passphrase make backup
+# Creates: backups/radius_YYYYMMDD_HHMMSS.sql.gz.gpg
+
 # List available backups
 make list-backups
 ```
@@ -252,8 +290,9 @@ make list-backups
 ### Restore from Backup
 
 ```bash
-# Restore a specific backup
+# Restore a specific backup (use --force for non-interactive mode)
 make restore FILE=backups/radius_20260127_120000.sql.gz
+make restore FILE=backups/radius_20260127_120000.sql.gz --force
 
 # Verify restore was successful
 make test-auth
@@ -302,14 +341,22 @@ freeradius:
 
 All replicas share the same MySQL database for user/NAS data.
 
+### Resilience & Auto-scaling
+
+- **PodDisruptionBudget** ensures minimum 1 replica remains available during maintenance or node drains
+- **topologySpreadConstraints** spread pods across nodes for fault tolerance
+- **HPA (Horizontal Pod Autoscaler)** for automatic scaling based on CPU/memory utilization
+
 ## CI/CD
 
 ### GitHub Actions
 
 | Workflow | Trigger | Description |
 |----------|---------|-------------|
-| `ci.yml` | Push to main, tags | Build & push Docker images |
+| `ci.yml` | Push to main, tags, PRs | Build, test, scan & push Docker images |
 | `helm.yml` | Changes to `examples/helm/` | Publish Helm chart |
+
+The CI pipeline includes Trivy vulnerability scanning, an automated test job, and FreeRADIUS version auto-detection from the built image.
 
 ### Required Secrets
 
@@ -334,6 +381,18 @@ helm install freeradius freeradius/freeradius
 ```
 
 ## Troubleshooting
+
+### Debug Mode
+
+Enable debug mode via the `RADIUS_DEBUG` environment variable to start FreeRADIUS with full debug output (`-X`):
+
+```bash
+# Enable debug mode with docker run
+docker run -e RADIUS_DEBUG=1 cepatkilatteknologi/freeradius:latest
+
+# Or in docker-compose, add to .env:
+RADIUS_DEBUG=1
+```
 
 ### FreeRADIUS won't start
 
@@ -395,16 +454,18 @@ docker exec freeradius sh -c 'echo "Message-Authenticator = 0x00" | radclient -t
    openssl rand -base64 32
    ```
 
-2. **Use strong passwords** - MySQL and RADIUS secrets should be at least 32 characters. Special characters (including `/`, `+`, `=` from base64) are fully supported
+2. **CHANGE_ME_* values are rejected** -- the entrypoint will fail on startup if any placeholder `CHANGE_ME_*` values remain in the configuration
 
-3. **Validate input** - The entrypoint script validates:
+3. **Use strong passwords** - MySQL and RADIUS secrets should be at least 32 characters. Special characters (including `/`, `+`, `=` from base64) are fully supported
+
+4. **Validate input** - The entrypoint script validates:
    - `MYSQL_DBNAME`: Only alphanumeric and underscore allowed
    - `MYSQL_PORT`: Must be numeric
    - `RADIUS_CLIENTS`: Must be valid CIDR notation
 
 ### Network Security
 
-4. **Restrict network access** to RADIUS ports (1812, 1813):
+5. **Restrict network access** to RADIUS ports (1812, 1813):
    - Use firewall rules to allow only trusted NAS devices
    - For Kubernetes, use NetworkPolicies
    - For cloud LoadBalancers, use internal LB annotations:
@@ -419,21 +480,32 @@ docker exec freeradius sh -c 'echo "Message-Authenticator = 0x00" | radclient -t
        service.beta.kubernetes.io/aws-load-balancer-internal: "true"
      ```
 
-5. **Status server (18121)** is bound to localhost by default - used only for health checks
+6. **NetworkPolicy** restricts MySQL access to FreeRADIUS and backup pods only
+
+7. **Pod Security Standards** labels enforce baseline policy on the namespace
+
+8. **Status server (18121)** is bound to localhost by default and is **no longer exposed** in the Dockerfile -- used only for internal health checks
 
 ### Database Security
 
-6. **Use TLS** for MySQL connections in production
-7. **Backup security** - Backup files contain sensitive data, secure the backup storage
+9. **MySQL TLS** supported for encrypted database traffic -- configure via `MYSQL_TLS_CA`, `MYSQL_TLS_CERT`, and `MYSQL_TLS_KEY` environment variables
+
+10. **Backup encryption** available via `BACKUP_ENCRYPT_KEY` for GPG-encrypted backups
+
+11. **Backup security** - Backup files contain sensitive data, secure the backup storage
 
 ### Container Security
 
-8. **Security contexts** - Helm chart includes:
-   - Pod anti-affinity for high availability
-   - Dropped capabilities (only NET_BIND_SERVICE if needed)
-   - No privilege escalation
+12. Container runs as **non-root** (freerad user via gosu)
 
-9. **Regular updates** - Rebuild images periodically for security patches
+13. **Container capabilities** are dropped (only SETUID, SETGID, NET_BIND_SERVICE retained)
+
+14. **Security contexts** - Helm chart includes:
+    - Pod anti-affinity for high availability
+    - Dropped capabilities (only SETUID, SETGID, NET_BIND_SERVICE)
+    - No privilege escalation (`no-new-privileges`)
+
+15. **Regular updates** - Rebuild images periodically for security patches
 
 ## License
 

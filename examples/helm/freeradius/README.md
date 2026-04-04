@@ -118,29 +118,54 @@ If you have `radtest` installed locally:
 radtest testuser testpass localhost 0 YOUR_RADIUS_SECRET
 ```
 
+### Helm Test
+
+```bash
+# Run Helm tests to verify deployment
+helm test freeradius -n freeradius
+```
+
 ## Configuration
 
 ### Key Values
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
+| `nameOverride` | Override chart name | `""` |
+| `fullnameOverride` | Override full release name | `""` |
+| `imagePullSecrets` | Image pull secrets for private registries | `[]` |
 | `freeradius.replicaCount` | Number of FreeRADIUS pods | `2` |
 | `freeradius.image.repository` | Image repository | `cepatkilatteknologi/freeradius` |
 | `freeradius.image.tag` | Image tag | `3.2.8` |
 | `freeradius.secret` | RADIUS shared secret | `CHANGE_ME_RADIUS_SECRET` |
 | `freeradius.healthcheckSecret` | Health check secret | `CHANGE_ME_HEALTHCHECK_SECRET` |
+| `freeradius.existingSecret` | Use existing Secret (skip creation) | `""` |
 | `freeradius.clients` | Additional clients (CIDR) | `""` |
 | `freeradius.service.type` | Service type | `LoadBalancer` |
+| `freeradius.service.loadBalancerSourceRanges` | Restrict LB source IPs | `[]` |
+| `freeradius.autoscaling.enabled` | Enable HPA | `false` |
+| `freeradius.autoscaling.minReplicas` | Min replicas for HPA | `2` |
+| `freeradius.autoscaling.maxReplicas` | Max replicas for HPA | `10` |
+| `freeradius.autoscaling.targetCPUUtilizationPercentage` | Target CPU % | `70` |
+| `freeradius.autoscaling.targetMemoryUtilizationPercentage` | Target memory % | `80` |
+| `freeradius.extraEnv` | Additional environment variables | `[]` |
+| `freeradius.extraVolumes` | Additional volumes | `[]` |
+| `freeradius.extraVolumeMounts` | Additional volume mounts | `[]` |
 | `mysql.enabled` | Deploy bundled MySQL | `true` |
 | `mysql.image.repository` | MySQL/MariaDB image | `mysql` |
 | `mysql.image.tag` | Image tag | `8.4` |
 | `mysql.rootPassword` | MySQL root password | `CHANGE_ME_ROOT_PASSWORD` |
 | `mysql.password` | MySQL user password | `CHANGE_ME_STRONG_PASSWORD` |
+| `mysql.existingSecret` | Use existing Secret for MySQL | `""` |
 | `mysql.persistence.enabled` | Enable persistence | `true` |
 | `mysql.persistence.size` | PVC size | `10Gi` |
 | `mysql.persistence.storageClass` | Storage class | `""` (default) |
 | `backup.enabled` | Enable backup CronJob | `true` |
 | `backup.schedule` | Backup schedule | `0 2 * * *` |
+| `networkPolicy.enabled` | Enable NetworkPolicy | `false` |
+| `metrics.serviceMonitor.enabled` | Enable Prometheus ServiceMonitor | `false` |
+| `metrics.serviceMonitor.interval` | Scrape interval | `"30s"` |
+| `metrics.serviceMonitor.labels` | Additional labels | `{}` |
 
 ### External MySQL
 
@@ -151,6 +176,7 @@ radtest testuser testpass localhost 0 YOUR_RADIUS_SECRET
 | `externalMysql.database` | Database name | `radius` |
 | `externalMysql.user` | Database user | `radius` |
 | `externalMysql.password` | Database password | `""` |
+| `externalMysql.existingSecret` | Use existing Secret for external MySQL | `""` |
 
 ## Local Development
 
@@ -209,6 +235,55 @@ helm install freeradius ./examples/helm/freeradius \
   -f my-values.yaml
 ```
 
+### External Secrets
+
+```bash
+# Using an existing Kubernetes Secret
+helm install freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --create-namespace \
+  --set freeradius.existingSecret=my-radius-secret \
+  --set mysql.existingSecret=my-mysql-secret
+```
+
+### Autoscaling
+
+```bash
+# Enable HPA
+helm install freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --create-namespace \
+  --set freeradius.autoscaling.enabled=true \
+  --set freeradius.autoscaling.minReplicas=2 \
+  --set freeradius.autoscaling.maxReplicas=10
+```
+
+### Monitoring
+
+```bash
+# Enable Prometheus ServiceMonitor
+helm install freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --create-namespace \
+  --set metrics.serviceMonitor.enabled=true
+```
+
+### Network Security
+
+```bash
+# Enable NetworkPolicy
+helm install freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --create-namespace \
+  --set networkPolicy.enabled=true
+
+# Restrict LoadBalancer source IPs
+helm install freeradius ./examples/helm/freeradius \
+  --namespace freeradius \
+  --create-namespace \
+  --set freeradius.service.loadBalancerSourceRanges[0]=10.0.0.0/8
+```
+
 ## Examples
 
 ### Production with External HA MySQL
@@ -217,28 +292,31 @@ helm install freeradius ./examples/helm/freeradius \
 # production-values.yaml
 freeradius:
   replicaCount: 3
-  secret: "super-secure-radius-secret"
-  healthcheckSecret: "super-secure-healthcheck-secret"
-  resources:
-    requests:
-      memory: "256Mi"
-      cpu: "200m"
-    limits:
-      memory: "512Mi"
-      cpu: "1000m"
+  existingSecret: "production-radius-secret"
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+  service:
+    loadBalancerSourceRanges:
+      - 10.0.0.0/8
 
 mysql:
   enabled: false
 
 externalMysql:
   host: "mysql-cluster.database.svc"
-  port: 3306
-  database: "radius"
-  user: "radius"
-  password: "db-password"
+  existingSecret: "production-mysql-secret"
+
+networkPolicy:
+  enabled: true
+
+metrics:
+  serviceMonitor:
+    enabled: true
 
 backup:
-  enabled: false  # Handle backups externally
+  enabled: false
 ```
 
 ### With Custom RADIUS Clients
@@ -354,6 +432,12 @@ kubectl delete namespace freeradius
 ## Production Considerations
 
 - Change all default passwords and secrets (special characters like `/`, `+`, `=` from base64 are supported)
+- Containers run as non-root with dropped capabilities
+- securityContext enforced on all pods
+- CHANGE_ME_* values are rejected during deployment
+- existingSecret support for external secret management
+- StartupProbe gives MySQL 5 minutes for first boot
+- Init container has 300s timeout
 - Use external MySQL for high availability
 - Configure appropriate resource limits
 - Set up monitoring and alerting
