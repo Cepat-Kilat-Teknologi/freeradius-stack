@@ -190,8 +190,8 @@ jobs:
           MYSQL_PORT=3306
           MYSQL_DBNAME=radius
           MYSQL_ROOT_PASSWORD=rootpass123
-          RADIUS_SECRET=testsecret123
-          HEALTHCHECK_SECRET=healthcheck123
+          RADIUS_SECRET=testing123
+          HEALTHCHECK_SECRET=testing123
           TZ=UTC
           RADIUS_ALLOW_PRIVATE_NETWORKS=true
           EOF
@@ -233,8 +233,8 @@ jobs:
           docker compose exec -T db mysql -uroot -prootpass123 radius -e \
             "INSERT INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass') ON DUPLICATE KEY UPDATE value='testpass';"
 
-          # Test auth
-          docker compose exec -T freeradius radtest testuser testpass localhost 0 testsecret123
+          # Test auth (secret must match clients.conf localhost default)
+          docker compose exec -T freeradius radtest testuser testpass localhost 0 testing123
 
       - name: Cleanup
         if: always()
