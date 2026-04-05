@@ -107,26 +107,39 @@ helm install freeradius examples/helm/freeradius \
 freeradius-stack/
 ├── Dockerfile                    # FreeRADIUS image
 ├── Makefile                      # Root commands
+├── .editorconfig                 # Editor settings
+├── .gitattributes                # Git file handling
+├── CODE_OF_CONDUCT.md            # Contributor Covenant 2.1
+├── CONTRIBUTING.md               # Contribution guidelines
+├── SECURITY.md                   # Security policy
+├── CHANGELOG.md                  # Release notes
 ├── scripts/
 │   ├── entrypoint.sh             # Container entrypoint
 │   └── setup-gh-pages.sh         # Helm repo setup
-├── .github/workflows/
-│   ├── ci.yml                    # Build & push images
-│   └── helm.yml                  # Publish Helm chart
+├── .github/
+│   ├── CODEOWNERS                # Code ownership
+│   ├── pull_request_template.md  # PR template
+│   └── workflows/
+│       ├── ci.yml                # Build & push images
+│       └── helm.yml              # Publish Helm chart
 └── examples/
     ├── docker/                   # Docker Compose
-    │   ├── docker-compose.yaml
+    │   ├── docker-compose.yaml       # Production
+    │   ├── docker-compose.dev.yaml   # Local dev (builds from source)
     │   ├── .env.example
     │   └── Makefile
     ├── kubernetes/               # K8s manifests
     │   ├── namespace.yaml
     │   ├── secret.yaml
     │   ├── configmap.yaml
+    │   ├── serviceaccount.yaml
+    │   ├── rbac.yaml
     │   ├── mysql-statefulset.yaml
     │   ├── freeradius-deployment.yaml
-    │   ├── kustomization.yaml
+    │   ├── backup-cronjob.yaml
     │   ├── networkpolicy.yaml
-    │   └── pdb.yaml
+    │   ├── pdb.yaml
+    │   └── kustomization.yaml
     └── helm/freeradius/          # Helm chart
         ├── Chart.yaml
         ├── .helmignore
@@ -135,6 +148,8 @@ freeradius-stack/
         └── templates/
             ├── NOTES.txt
             ├── hpa.yaml
+            ├── role.yaml
+            ├── rolebinding.yaml
             ├── networkpolicy.yaml
             ├── servicemonitor.yaml
             └── tests/
@@ -254,7 +269,7 @@ make clean             # Remove everything
 
 ```bash
 # Using radtest (install freeradius-utils)
-radtest username password localhost 1812 YOUR_SECRET
+radtest username password localhost 0 YOUR_SECRET
 
 # From container
 docker exec freeradius sh -c 'echo "User-Name=testuser,User-Password=testpass" | radclient 127.0.0.1:1812 auth testing123'

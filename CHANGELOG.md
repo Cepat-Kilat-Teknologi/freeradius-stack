@@ -13,17 +13,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced all `:latest` image tags with semantic versioning (`3.2.8`)
 - Removed `:latest` tag from CI pipeline (only semantic versions pushed)
 - Removed hardcoded version string from entrypoint log message
+- Aligned `RADIUS_ALLOW_PRIVATE_NETWORKS` default to `true` across all compose files
+- Increased FreeRADIUS liveness probe `initialDelaySeconds` from 15s to 60s (prevents CrashLoopBackOff on first deploy)
 
 ### Fixed
 
 - Fixed `/etc/freeradius` permission issue in hardened containers (`cap_drop: ALL`)
+- Fixed CI test job: `.env` heredoc whitespace, wait-for-healthy logic, radtest secret mismatch
+- Fixed Docker Compose not forwarding `DO_NOT_IMPORT_DB`, `MYSQL_TLS_CA/CERT/KEY` to container
+- Fixed Helm `mysql.existingSecret` and `externalMysql.existingSecret` being ignored (dead values)
+- Fixed Helm `test-connection.yaml` ignoring `existingSecret` configuration
+- Fixed Helm `securityContext` merge producing duplicate YAML keys
+- Fixed Kubernetes MySQL StatefulSet missing `fsGroup: 999` (PVC permission failures on fresh deploy)
+- Fixed Kubernetes `RADIUS_ALLOW_PRIVATE_NETWORKS` not set (silently defaulting to `true` in entrypoint)
+- Fixed entrypoint `escape_for_sed` not escaping pipe character `|` (sed breakage with passwords containing `|`)
+- Fixed NetworkPolicy backup pod selector too broad (added `app.kubernetes.io/name` label)
+- Fixed Makefile missing `.PHONY` targets and `make logs` dumping full history
 
 ### Added
 
 - `docker-compose.dev.yaml` for local development builds from source
 - Kubernetes RBAC (Role, RoleBinding, ServiceAccount) for least-privilege enforcement
 - Helm RBAC templates (`role.yaml`, `rolebinding.yaml`) with `rbac.create` toggle
+- Helm `freeradius.mysql.secretName` helper for proper MySQL secret routing
+- Helm backup CronJob now includes `imagePullSecrets` and `serviceAccountName`
+- Kubernetes ConfigMap and Deployment now include `RADIUS_ALLOW_PRIVATE_NETWORKS`
+- Dev compose logging block with size limits (`max-size: 50m`)
+- `.env.example` documents `BACKUP_ENCRYPT_KEY`, `BACKUP_DIR`, `RETENTION_DAYS`
+- Helm ServiceMonitor documents exporter sidecar requirement
+- Helm NOTES.txt clarifies radtest localhost secret usage
 - Governance documentation: SECURITY.md, CONTRIBUTING.md, CHANGELOG.md, CODE_OF_CONDUCT.md
+- Upstream FreeRADIUS acknowledgments and source link in README
 - Project metadata: .editorconfig, .gitattributes, CODEOWNERS, PR template
 - `.playwright-mcp/` added to `.gitignore`
 

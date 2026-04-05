@@ -163,6 +163,8 @@ radtest testuser testpass localhost 0 "$RADIUS_SECRET"
 | `mysql-statefulset.yaml` | MySQL StatefulSet with PVC |
 | `freeradius-deployment.yaml` | FreeRADIUS Deployment (2 replicas) |
 | `backup-cronjob.yaml` | Scheduled backup CronJob |
+| `serviceaccount.yaml` | ServiceAccount for FreeRADIUS pods |
+| `rbac.yaml` | Role and RoleBinding (least-privilege, empty rules) |
 | `networkpolicy.yaml` | NetworkPolicy for MySQL and RADIUS traffic isolation |
 | `pdb.yaml` | PodDisruptionBudget for FreeRADIUS |
 | `kustomization.yaml` | Kustomize configuration |
@@ -197,14 +199,36 @@ kubectl scale deployment freeradius -n freeradius --replicas=3
 kubectl get pods -n freeradius
 ```
 
+## Configuration
+
+### ConfigMap Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MYSQL_HOST` | MySQL hostname | `mysql` |
+| `MYSQL_PORT` | MySQL port | `3306` |
+| `MYSQL_USER` | MySQL username | `radius` |
+| `MYSQL_DBNAME` | Database name | `radius` |
+| `TZ` | Timezone | `Asia/Jakarta` |
+| `RADIUS_CLIENTS` | Additional RADIUS clients (comma-separated CIDR) | `""` |
+| `RADIUS_ALLOW_PRIVATE_NETWORKS` | Allow RFC 1918 ranges as RADIUS clients | `"false"` |
+
+Optional environment variables (not in ConfigMap, set via `kubectl set env`):
+- `RADIUS_DEBUG` -- enable FreeRADIUS debug mode (`-X`)
+- `DO_NOT_IMPORT_DB` -- skip database schema import on startup
+
 ## Security
 
+- **ServiceAccount** with `automountServiceAccountToken: false` (least privilege)
+- **RBAC** Role with empty rules (no API server access)
 - **SecurityContext** on all containers (capabilities dropped, no privilege escalation)
-- **NetworkPolicy** restricts MySQL to FreeRADIUS and backup pods only
+- **MySQL fsGroup: 999** ensures PVC permissions are correct on fresh provisioning
+- **NetworkPolicy** restricts MySQL to FreeRADIUS and backup pods only (both `name` and `component` labels required)
 - **Pod Security Standards** labels on namespace (`enforce: baseline`, `warn: restricted`)
 - **PodDisruptionBudget** ensures minimum 1 pod during maintenance
 - **topologySpreadConstraints** spread pods across nodes
 - **CHANGE_ME_* rejection** -- deployment fails if placeholder secrets are used
+- FreeRADIUS liveness probe starts at **60s** to avoid CrashLoopBackOff during schema import
 - Init container has a **300s timeout** (won't hang forever)
 - MySQL has a **startupProbe** (5-minute window for slow first boot)
 
