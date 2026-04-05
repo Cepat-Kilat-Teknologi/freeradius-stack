@@ -1,0 +1,9 @@
+# CODEOWNERS — Cepat Kilat Teknologi
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+*                       @Cepat-Kilat-Teknologi
+/Dockerfile             @Cepat-Kilat-Teknologi
+/scripts/               @Cepat-Kilat-Teknologi
+/.github/               @Cepat-Kilat-Teknologi
+/examples/helm/         @Cepat-Kilat-Teknologi
+/examples/kubernetes/   @Cepat-Kilat-Teknologi

@@ -2,6 +2,7 @@ apiVersion: v2
 name: freeradius
 description: A Helm chart for FreeRADIUS with MySQL backend
 type: application
+kubeVersion: ">=1.25.0-0"
 version: 1.0.0
 appVersion: "3.2.8"
 keywords:

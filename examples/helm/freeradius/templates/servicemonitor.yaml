@@ -1,0 +1,19 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "freeradius.fullname" . }}
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "freeradius.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: status
+  endpoints:
+    - port: radius-status
+      interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
+{{- end }}

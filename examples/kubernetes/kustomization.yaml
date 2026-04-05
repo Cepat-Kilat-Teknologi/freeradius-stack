@@ -7,9 +7,13 @@ resources:
   - namespace.yaml
   - secret.yaml
   - configmap.yaml
+  - serviceaccount.yaml
+  - rbac.yaml
   - mysql-statefulset.yaml
   - freeradius-deployment.yaml
   - backup-cronjob.yaml
+  - networkpolicy.yaml
+  - pdb.yaml
 
 labels:
   - pairs:

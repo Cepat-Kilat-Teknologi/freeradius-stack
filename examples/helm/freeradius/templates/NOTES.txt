@@ -1,0 +1,48 @@
+FreeRADIUS has been deployed!
+
+{{- if .Values.mysql.enabled }}
+Database: Bundled MySQL ({{ .Values.mysql.image.repository }}:{{ .Values.mysql.image.tag }})
+{{- else }}
+Database: External MySQL ({{ .Values.externalMysql.host }}:{{ .Values.externalMysql.port }})
+{{- end }}
+
+== Get the RADIUS service address ==
+
+{{- if eq .Values.freeradius.service.type "LoadBalancer" }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  kubectl get svc {{ include "freeradius.fullname" . }} -n {{ .Release.Namespace }} -w
+{{- else if eq .Values.freeradius.service.type "NodePort" }}
+  export NODE_IP=$(kubectl get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "RADIUS Auth: $NODE_IP:$(kubectl get svc {{ include "freeradius.fullname" . }} -n {{ .Release.Namespace }} -o jsonpath='{.spec.ports[0].nodePort}')"
+{{- else }}
+  kubectl port-forward svc/{{ include "freeradius.fullname" . }} 1812:1812/udp -n {{ .Release.Namespace }}
+{{- end }}
+
+== Test Authentication ==
+
+  # Add test user
+  kubectl exec -n {{ .Release.Namespace }} {{ include "freeradius.fullname" . }}-mysql-0 -- \
+    mysql -u {{ include "freeradius.mysql.user" . }} -p'<PASSWORD>' {{ include "freeradius.mysql.database" . }} -e \
+    "INSERT INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass') ON DUPLICATE KEY UPDATE value='testpass';"
+
+  # Test RADIUS auth
+  kubectl exec -n {{ .Release.Namespace }} deploy/{{ include "freeradius.fullname" . }} -- \
+    radtest testuser testpass 127.0.0.1 0 testing123
+
+== Ports ==
+
+  Auth:   UDP {{ .Values.freeradius.service.ports.auth }}
+  Acct:   UDP {{ .Values.freeradius.service.ports.acct }}
+  Status: UDP 18121 (internal only)
+
+{{- if contains "CHANGE_ME" .Values.freeradius.secret }}
+
+== WARNING ==
+  Default secrets detected! Change them for production:
+    --set freeradius.secret=YOUR_SECRET
+    --set freeradius.healthcheckSecret=YOUR_SECRET
+  {{- if .Values.mysql.enabled }}
+    --set mysql.rootPassword=YOUR_PASSWORD
+    --set mysql.password=YOUR_PASSWORD
+  {{- end }}
+{{- end }}

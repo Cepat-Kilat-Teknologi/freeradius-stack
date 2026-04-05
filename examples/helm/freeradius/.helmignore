@@ -1,0 +1,17 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+
+# Documentation (included in chart but not needed at runtime)
+*.md
+
+# Local development values
+values-local.yaml
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -6,3 +6,8 @@
 backups/
 .helm-packages/
 *.tgz
+.playwright-mcp/
+
+# Database dumps (prevent accidental commit of sensitive data)
+**/*.sql.gz
+**/*.sql
