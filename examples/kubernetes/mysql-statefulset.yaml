@@ -53,6 +53,8 @@ spec:
         app.kubernetes.io/name: mysql
         app.kubernetes.io/component: database
     spec:
+      securityContext:
+        fsGroup: 999
       containers:
         - name: mysql
           image: mysql:8.4

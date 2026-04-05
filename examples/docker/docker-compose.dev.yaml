@@ -40,6 +40,10 @@ services:
       HEALTHCHECK_SECRET: ${HEALTHCHECK_SECRET:-testing123}
       RADIUS_DEBUG: ${RADIUS_DEBUG:-}
       RADIUS_ALLOW_PRIVATE_NETWORKS: "true"
+      DO_NOT_IMPORT_DB: ${DO_NOT_IMPORT_DB:-}
+      MYSQL_TLS_CA: ${MYSQL_TLS_CA:-}
+      MYSQL_TLS_CERT: ${MYSQL_TLS_CERT:-}
+      MYSQL_TLS_KEY: ${MYSQL_TLS_KEY:-}
       TZ: ${TZ:-Asia/Jakarta}
     ports:
       - "1812:1812/udp"
@@ -49,6 +53,11 @@ services:
       - radius_config:/etc/freeradius/3.0/custom
     networks:
       - radius-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
     init: true
     security_opt:
       - no-new-privileges:true

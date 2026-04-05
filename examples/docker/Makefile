@@ -1,4 +1,4 @@
-.PHONY: help pull up down restart logs status clean backup restore
+.PHONY: help pull up down restart logs status clean backup restore init-env mysql test-auth add-test-user list-backups
 
 # Load .env file if exists
 ifneq (,$(wildcard ./.env))
@@ -44,7 +44,7 @@ restart:
 	docker compose restart
 
 logs:
-	docker compose logs -f
+	docker compose logs -f --tail=200
 
 status:
 	@docker compose ps

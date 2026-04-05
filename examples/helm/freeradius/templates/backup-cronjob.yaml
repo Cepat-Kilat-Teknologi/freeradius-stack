@@ -122,6 +122,11 @@ spec:
             {{- include "freeradius.selectorLabels" . | nindent 12 }}
             app.kubernetes.io/component: backup
         spec:
+          serviceAccountName: {{ include "freeradius.serviceAccountName" . }}
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           restartPolicy: OnFailure
           {{- with .Values.nodeSelector }}
           nodeSelector:
@@ -168,7 +173,7 @@ spec:
                 - name: MYSQL_PASSWORD
                   valueFrom:
                     secretKeyRef:
-                      name: {{ include "freeradius.secretName" . }}
+                      name: {{ include "freeradius.mysql.secretName" . }}
                       key: mysql-password
                 - name: BACKUP_DIR
                   value: /backups

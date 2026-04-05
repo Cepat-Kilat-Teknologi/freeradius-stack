@@ -25,9 +25,11 @@ Database: External MySQL ({{ .Values.externalMysql.host }}:{{ .Values.externalMy
     mysql -u {{ include "freeradius.mysql.user" . }} -p'<PASSWORD>' {{ include "freeradius.mysql.database" . }} -e \
     "INSERT INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass') ON DUPLICATE KEY UPDATE value='testpass';"
 
-  # Test RADIUS auth
+  # Test RADIUS auth (use the default localhost client secret from clients.conf)
   kubectl exec -n {{ .Release.Namespace }} deploy/{{ include "freeradius.fullname" . }} -- \
     radtest testuser testpass 127.0.0.1 0 testing123
+  # NOTE: 'testing123' is the default FreeRADIUS localhost client secret.
+  # To test from outside the pod, use the RADIUS_SECRET you configured.
 
 == Ports ==
 

@@ -77,9 +77,6 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-            {{- with .Values.securityContext }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
           ports:
             - containerPort: 1812
               protocol: UDP
@@ -124,7 +121,7 @@ spec:
             - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "freeradius.secretName" . }}
+                  name: {{ include "freeradius.mysql.secretName" . }}
                   key: mysql-password
             - name: RADIUS_SECRET
               valueFrom:
@@ -153,9 +150,10 @@ spec:
                 - sh
                 - -c
                 - "echo 'Message-Authenticator = 0x00' | radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET 2>&1 | grep -q Received"
-            initialDelaySeconds: 15
+            initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 10
+            failureThreshold: 3
           readinessProbe:
             exec:
               command:
