@@ -19,6 +19,7 @@ spec:
               app.kubernetes.io/name: freeradius
         - podSelector:
             matchLabels:
+              app.kubernetes.io/name: freeradius
               app.kubernetes.io/component: backup
       ports:
         - protocol: TCP

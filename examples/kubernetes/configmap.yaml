@@ -13,3 +13,5 @@ data:
   TZ: "Asia/Jakarta"
   # Comma-separated CIDR for additional RADIUS clients
   RADIUS_CLIENTS: ""
+  # Set to "true" to allow all RFC 1918 private networks as RADIUS clients
+  RADIUS_ALLOW_PRIVATE_NETWORKS: "false"

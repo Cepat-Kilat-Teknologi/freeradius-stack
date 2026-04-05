@@ -79,13 +79,33 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-Secret name (supports existingSecret)
+Secret name for RADIUS secrets (supports existingSecret)
 */}}
 {{- define "freeradius.secretName" -}}
 {{- if .Values.freeradius.existingSecret }}
 {{- .Values.freeradius.existingSecret }}
 {{- else }}
 {{- include "freeradius.fullname" . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Secret name for MySQL credentials (supports mysql.existingSecret / externalMysql.existingSecret)
+Falls back to the main secret if no MySQL-specific secret is configured.
+*/}}
+{{- define "freeradius.mysql.secretName" -}}
+{{- if .Values.mysql.enabled }}
+  {{- if .Values.mysql.existingSecret }}
+    {{- .Values.mysql.existingSecret }}
+  {{- else }}
+    {{- include "freeradius.secretName" . }}
+  {{- end }}
+{{- else }}
+  {{- if .Values.externalMysql.existingSecret }}
+    {{- .Values.externalMysql.existingSecret }}
+  {{- else }}
+    {{- include "freeradius.secretName" . }}
+  {{- end }}
 {{- end }}
 {{- end }}
 

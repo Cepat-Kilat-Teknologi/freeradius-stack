@@ -28,6 +28,6 @@ spec:
         - name: HEALTHCHECK_SECRET
           valueFrom:
             secretKeyRef:
-              name: {{ include "freeradius.fullname" . }}
+              name: {{ include "freeradius.secretName" . }}
               key: healthcheck-secret
   restartPolicy: Never

@@ -138,7 +138,7 @@ fi
 
 # Escape helper functions
 escape_for_sed() {
-    printf '%s\n' "$1" | sed -e 's/[\/&.*[\]^$]/\\&/g'
+    printf '%s\n' "$1" | sed -e 's/[\/&.*[\]^$|]/\\&/g'
 }
 escape_for_freeradius_quoted() {
     printf '%s\n' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'

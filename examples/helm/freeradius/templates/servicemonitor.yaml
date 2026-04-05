@@ -1,4 +1,8 @@
 {{- if .Values.metrics.serviceMonitor.enabled }}
+# NOTE: FreeRADIUS does not expose a native Prometheus metrics endpoint.
+# This ServiceMonitor requires a RADIUS exporter sidecar (e.g. freeradius_exporter)
+# that exposes HTTP metrics on the radius-status port. Without an exporter,
+# Prometheus cannot scrape the UDP-based RADIUS status server directly.
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:

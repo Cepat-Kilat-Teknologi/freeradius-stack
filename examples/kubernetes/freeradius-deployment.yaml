@@ -150,6 +150,11 @@ spec:
                 configMapKeyRef:
                   name: freeradius-config
                   key: RADIUS_CLIENTS
+            - name: RADIUS_ALLOW_PRIVATE_NETWORKS
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: RADIUS_ALLOW_PRIVATE_NETWORKS
             - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -185,9 +190,10 @@ spec:
                 - sh
                 - -c
                 - "echo 'Message-Authenticator = 0x00' | radclient -t 3 127.0.0.1:18121 status $HEALTHCHECK_SECRET 2>&1 | grep -q Received"
-            initialDelaySeconds: 15
+            initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 10
+            failureThreshold: 3
           readinessProbe:
             exec:
               command:
