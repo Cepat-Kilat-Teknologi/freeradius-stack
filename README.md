@@ -519,8 +519,13 @@ MIT License - see [LICENSE](LICENSE) for details.
 4. Run tests
 5. Submit a pull request
 
+## Acknowledgments
+
+This project is a deployment stack built around [FreeRADIUS](https://github.com/FreeRADIUS/freeradius-server), the open-source RADIUS server maintained by the FreeRADIUS project and [InkBridge Networks](https://inkbridgenetworks.com/). All credit for the RADIUS server itself goes to the FreeRADIUS team and its contributors.
+
 ## Links
 
+- [FreeRADIUS Source Code](https://github.com/FreeRADIUS/freeradius-server)
 - [FreeRADIUS Documentation](https://freeradius.org/documentation/)
 - [FreeRADIUS Wiki](https://wiki.freeradius.org/)
 - [MySQL Schema Reference](https://wiki.freeradius.org/guide/SQL-HOWTO)
