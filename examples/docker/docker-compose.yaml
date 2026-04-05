@@ -31,7 +31,7 @@ services:
           cpus: "1.0"
 
   freeradius:
-    image: ${FREERADIUS_IMAGE:-cepatkilatteknologi/freeradius:latest}
+    image: ${FREERADIUS_IMAGE:-cepatkilatteknologi/freeradius:3.2.8}
     container_name: freeradius
     depends_on:
       db:

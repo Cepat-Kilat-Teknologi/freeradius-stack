@@ -4,7 +4,7 @@ Production-ready FreeRADIUS deployment with MySQL backend. Supports Docker Compo
 
 ## Features
 
-- **FreeRADIUS 3.2.x** with MySQL/MariaDB backend (Debian Trixie packages)
+- **FreeRADIUS 3.2.8** with MySQL/MariaDB backend (Debian Trixie base, FreeRADIUS from sid)
 - **Multi-platform** Docker images (linux/amd64, linux/arm64)
 - **Multiple deployment options**: Docker Compose, Kubernetes manifests, Helm chart
 - **High Availability** ready with external MySQL cluster support
@@ -25,8 +25,8 @@ Production-ready FreeRADIUS deployment with MySQL backend. Supports Docker Compo
 
 | Registry | Image |
 |----------|-------|
-| Docker Hub | `cepatkilatteknologi/freeradius:latest` |
-| GHCR | `ghcr.io/cepat-kilat-teknologi/freeradius:latest` |
+| Docker Hub | `cepatkilatteknologi/freeradius:3.2.8` |
+| GHCR | `ghcr.io/cepat-kilat-teknologi/freeradius:3.2.8` |
 
 ## Quick Start
 
@@ -163,7 +163,7 @@ freeradius-stack/
 | `MYSQL_TLS_KEY` | Path to MySQL client key | No | - |
 | `BACKUP_ENCRYPT_KEY` | GPG passphrase for backup encryption | No | - |
 | `DB_IMAGE` | Database image (Docker Compose) | No | `mysql:8.4` |
-| `FREERADIUS_IMAGE` | FreeRADIUS image override (Docker Compose) | No | `cepatkilatteknologi/freeradius:latest` |
+| `FREERADIUS_IMAGE` | FreeRADIUS image override (Docker Compose) | No | `cepatkilatteknologi/freeradius:3.2.8` |
 
 ### Adding RADIUS Clients
 
@@ -388,7 +388,7 @@ Enable debug mode via the `RADIUS_DEBUG` environment variable to start FreeRADIU
 
 ```bash
 # Enable debug mode with docker run
-docker run -e RADIUS_DEBUG=1 cepatkilatteknologi/freeradius:latest
+docker run -e RADIUS_DEBUG=1 cepatkilatteknologi/freeradius:3.2.8
 
 # Or in docker-compose, add to .env:
 RADIUS_DEBUG=1
@@ -428,7 +428,7 @@ docker exec freeradius freeradius -X
 
 ### Authentication failing with special characters in secret
 
-If your `RADIUS_SECRET` contains special characters (e.g., `/`, `+`, `=` from base64), ensure you're using image version `3.2.8` or later. Earlier versions had a bug where special characters were incorrectly escaped.
+If your `RADIUS_SECRET` contains special characters (e.g., `/`, `+`, `=` from base64), ensure you're using the latest image version. Earlier versions had a bug where special characters were incorrectly escaped.
 
 ```bash
 # Verify the secret in FreeRADIUS config matches your RADIUS_SECRET

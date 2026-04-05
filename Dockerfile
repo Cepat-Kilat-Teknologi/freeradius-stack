@@ -1,5 +1,5 @@
 # FreeRADIUS 3.2.x with MySQL backend
-# Using Debian trixie official packages
+# Using Debian trixie base with FreeRADIUS 3.2.8 from sid
 # For reproducible builds, pin the digest:
 # ARG from=debian:trixie-slim@sha256:<digest>
 ARG from=debian:trixie-slim
@@ -20,9 +20,15 @@ ARG freerad_gid=101
 RUN groupadd -g ${freerad_gid} -r freerad \
     && useradd -u ${freerad_uid} -g freerad -r -M -d /etc/freeradius -s /usr/sbin/nologin freerad
 
-# Install FreeRADIUS and dependencies from Debian official repo
-# Note: mariadb-client is the correct choice on Debian -- mysql-client is a
-# transitional package. mariadb-client is wire-compatible with MySQL 8.4.
+# Add Debian sid repo for FreeRADIUS 3.2.8, pinned low so only freeradius pulls from it.
+# Base system and all other packages stay on trixie (stable).
+RUN echo "deb http://deb.debian.org/debian sid main" > /etc/apt/sources.list.d/sid.list \
+    && printf 'Package: *\nPin: release a=unstable\nPin-Priority: 100\n' > /etc/apt/preferences.d/sid-low-priority \
+    && printf 'Package: freeradius*\nPin: release a=unstable\nPin-Priority: 600\n' >> /etc/apt/preferences.d/sid-low-priority \
+    && printf 'Package: libfreeradius*\nPin: release a=unstable\nPin-Priority: 600\n' >> /etc/apt/preferences.d/sid-low-priority
+
+# Install FreeRADIUS 3.2.8 from sid, everything else from trixie.
+# mariadb-client is wire-compatible with MySQL 8.4.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     freeradius \
     freeradius-mysql \
@@ -30,11 +36,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mariadb-client \
     gosu \
     tzdata \
+    && rm -f /etc/apt/sources.list.d/sid.list /etc/apt/preferences.d/sid-low-priority \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Create symlink for raddb compatibility
 RUN ln -sf /etc/freeradius/3.0 /etc/raddb
+
+# Fix permissions for hardened containers (cap_drop: ALL removes DAC_OVERRIDE).
+# Debian packages set /etc/freeradius to 2750 (freerad:freerad), which blocks
+# root from traversing or writing when DAC_OVERRIDE is dropped. The entrypoint
+# needs access during init before dropping to freerad via gosu.
+# Solution: add root to freerad group + make dirs/files group-writable.
+RUN usermod -aG freerad root \
+    && chmod 2775 /etc/freeradius \
+    && find /etc/freeradius/3.0 -type d -exec chmod 2775 {} + \
+    && find /etc/freeradius/3.0 -type f -exec chmod 664 {} +
 
 # Copy entrypoint and set permissions
 COPY --link --chmod=755 scripts/entrypoint.sh /entrypoint.sh

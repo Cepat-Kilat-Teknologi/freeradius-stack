@@ -77,7 +77,7 @@ if [[ "$HEALTHCHECK_SECRET" == "testing123" ]] || [[ "$HEALTHCHECK_SECRET" == "C
     echo "WARNING: HEALTHCHECK_SECRET is using default value. Set a unique value in production." >&2
 fi
 
-echo "Starting FreeRADIUS 3.2.8 initialization..."
+echo "Starting FreeRADIUS initialization..."
 
 # Wait for MySQL with proper timeout handling
 echo "Waiting for MySQL to be ready..."
