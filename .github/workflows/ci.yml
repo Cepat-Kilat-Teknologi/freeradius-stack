@@ -182,8 +182,8 @@ jobs:
       - name: Start services
         working-directory: examples/docker
         run: |
-          # Create test .env
-          cat > .env <<'EOF'
+          # Create test .env (no leading whitespace)
+          cat > .env <<EOF
           MYSQL_USER=radius
           MYSQL_PASSWORD=testpass123
           MYSQL_HOST=db
@@ -195,6 +195,8 @@ jobs:
           TZ=UTC
           RADIUS_ALLOW_PRIVATE_NETWORKS=true
           EOF
+          # Strip leading whitespace from .env
+          sed -i 's/^[[:space:]]*//' .env
 
           # Override image in compose
           FREERADIUS_IMAGE=freeradius:test docker compose up -d
@@ -202,13 +204,21 @@ jobs:
       - name: Wait for services
         working-directory: examples/docker
         run: |
-          echo "Waiting for services to be healthy..."
-          for i in $(seq 1 60); do
-            if docker compose ps | grep -q "healthy"; then
-              echo "Services are healthy"
+          echo "Waiting for all services to be healthy..."
+          for i in $(seq 1 90); do
+            HEALTHY=$(docker compose ps --format json | grep -c '"healthy"' || true)
+            TOTAL=$(docker compose ps --format json | wc -l | tr -d ' ')
+            echo "  Healthy: $HEALTHY / $TOTAL ($i/90)"
+            if [ "$HEALTHY" -ge 2 ] 2>/dev/null; then
+              echo "All services are healthy!"
               break
             fi
-            echo "  Waiting ($i/60)..."
+            if [ "$i" -eq 90 ]; then
+              echo "Timeout waiting for services"
+              docker compose ps
+              docker compose logs
+              exit 1
+            fi
             sleep 5
           done
           docker compose ps
@@ -216,6 +226,9 @@ jobs:
       - name: Test RADIUS authentication
         working-directory: examples/docker
         run: |
+          # Verify MySQL is actually accepting connections
+          docker compose exec -T db mysqladmin ping -uroot -prootpass123 --silent
+
           # Add test user
           docker compose exec -T db mysql -uroot -prootpass123 radius -e \
             "INSERT INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass') ON DUPLICATE KEY UPDATE value='testpass';"
