@@ -1,0 +1,16 @@
+# Auto-detect text files and normalize line endings
+* text=auto
+
+# Force LF line endings for shell scripts and config files
+*.sh         text eol=lf
+*.yaml       text eol=lf
+*.yml        text eol=lf
+Makefile     text eol=lf
+Dockerfile   text eol=lf
+*.md         text eol=lf
+
+# Exclude SQL from language statistics
+*.sql linguist-detectable=false
+
+# Mark compressed files as binary
+*.gz binary

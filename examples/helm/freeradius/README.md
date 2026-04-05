@@ -134,6 +134,8 @@ helm test freeradius -n freeradius
 | `nameOverride` | Override chart name | `""` |
 | `fullnameOverride` | Override full release name | `""` |
 | `imagePullSecrets` | Image pull secrets for private registries | `[]` |
+| `serviceAccount.create` | Create ServiceAccount | `true` |
+| `rbac.create` | Create Role and RoleBinding | `true` |
 | `freeradius.replicaCount` | Number of FreeRADIUS pods | `2` |
 | `freeradius.image.repository` | Image repository | `cepatkilatteknologi/freeradius` |
 | `freeradius.image.tag` | Image tag | `3.2.8` |

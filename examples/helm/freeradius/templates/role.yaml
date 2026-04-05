@@ -1,0 +1,11 @@
+{{- if and .Values.serviceAccount.create .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "freeradius.fullname" . }}
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+# FreeRADIUS does not require Kubernetes API access.
+# Empty rules enforce least-privilege on clusters with restrictive RBAC.
+rules: []
+{{- end }}

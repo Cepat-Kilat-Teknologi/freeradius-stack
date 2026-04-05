@@ -1,0 +1,33 @@
+# FreeRADIUS RBAC - Principle of Least Privilege
+#
+# FreeRADIUS pods do not require any Kubernetes API access.
+# The Role below has empty rules to explicitly declare that this
+# service account has zero permissions, rather than relying on
+# default RBAC behavior.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: freeradius
+  namespace: freeradius
+  labels:
+    app.kubernetes.io/name: freeradius
+    app.kubernetes.io/component: radius-server
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: freeradius
+  namespace: freeradius
+  labels:
+    app.kubernetes.io/name: freeradius
+    app.kubernetes.io/component: radius-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: freeradius
+subjects:
+  - kind: ServiceAccount
+    name: freeradius
+    namespace: freeradius

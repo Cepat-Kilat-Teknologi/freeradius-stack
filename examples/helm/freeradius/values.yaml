@@ -142,6 +142,10 @@ serviceAccount:
   name: ""
   annotations: {}
 
+# RBAC configuration
+rbac:
+  create: true
+
 # Pod security context
 podSecurityContext:
   fsGroup: 101
