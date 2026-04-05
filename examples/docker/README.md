@@ -49,8 +49,8 @@ make add-test-user
 # Test authentication
 make test-auth
 
-# Or manually:
-radtest testuser testpass localhost 1812 YOUR_SECRET
+# Or manually (4th argument is NAS port number, not UDP port):
+radtest testuser testpass localhost 0 YOUR_SECRET
 ```
 
 ## Configuration
@@ -175,6 +175,30 @@ make down && make up
 make logs
 ```
 
+## Development Stack
+
+For local development (builds image from source):
+
+```bash
+docker compose -f docker-compose.dev.yaml up -d --build
+```
+
+This uses `docker-compose.dev.yaml` which builds from the local Dockerfile instead of pulling from Docker Hub.
+
+## Additional Environment Variables
+
+These variables are forwarded to the container but not commonly changed:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DO_NOT_IMPORT_DB` | Skip database schema import | (unset) |
+| `MYSQL_TLS_CA` | Path to MySQL CA certificate | (unset) |
+| `MYSQL_TLS_CERT` | Path to MySQL client certificate | (unset) |
+| `MYSQL_TLS_KEY` | Path to MySQL client key | (unset) |
+| `BACKUP_ENCRYPT_KEY` | GPG passphrase for encrypted backups | (unset) |
+| `BACKUP_DIR` | Backup directory inside container | `/backups` |
+| `RETENTION_DAYS` | Backup retention period | `7` |
+
 ## Security Notes
 
 - Change all `CHANGE_ME_*` values in `.env` before use
@@ -185,4 +209,5 @@ make logs
 - Container runs as non-root (`freerad` user)
 - Capabilities are dropped (only `SETUID`, `SETGID`, `NET_BIND_SERVICE` retained)
 - `no-new-privileges` security option enabled
+- Log rotation configured (production: 20m/5 files, dev: 50m/3 files)
 - MySQL TLS available for encrypted database connections

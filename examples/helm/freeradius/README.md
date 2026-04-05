@@ -239,14 +239,21 @@ helm install freeradius ./examples/helm/freeradius \
 
 ### External Secrets
 
+The chart supports separate existing secrets for RADIUS and MySQL credentials:
+
 ```bash
-# Using an existing Kubernetes Secret
+# Using existing Kubernetes Secrets
 helm install freeradius ./examples/helm/freeradius \
   --namespace freeradius \
   --create-namespace \
   --set freeradius.existingSecret=my-radius-secret \
   --set mysql.existingSecret=my-mysql-secret
 ```
+
+When `freeradius.existingSecret` is set, the chart skips creating its own Secret. The `mysql.existingSecret` (or `externalMysql.existingSecret` when `mysql.enabled=false`) routes MySQL credential lookups to a separate secret. If only `freeradius.existingSecret` is set, MySQL credentials are also looked up from that secret.
+
+**Required keys in the RADIUS secret:** `radius-secret`, `healthcheck-secret`
+**Required keys in the MySQL secret:** `mysql-password`, `mysql-root-password` (root only needed when `mysql.enabled=true`)
 
 ### Autoscaling
 
@@ -262,8 +269,10 @@ helm install freeradius ./examples/helm/freeradius \
 
 ### Monitoring
 
+**Note:** FreeRADIUS does not expose a native Prometheus metrics endpoint. The ServiceMonitor requires a RADIUS exporter sidecar (e.g., `freeradius_exporter`) that exposes HTTP metrics. Without an exporter, Prometheus cannot scrape the UDP-based RADIUS status server.
+
 ```bash
-# Enable Prometheus ServiceMonitor
+# Enable Prometheus ServiceMonitor (requires exporter sidecar)
 helm install freeradius ./examples/helm/freeradius \
   --namespace freeradius \
   --create-namespace \
@@ -436,13 +445,18 @@ kubectl delete namespace freeradius
 - Change all default passwords and secrets (special characters like `/`, `+`, `=` from base64 are supported)
 - Containers run as non-root with dropped capabilities
 - securityContext enforced on all pods
+- MySQL StatefulSet uses `fsGroup: 999` for correct PVC permissions
+- FreeRADIUS liveness probe starts at 60s to avoid CrashLoopBackOff during schema import
 - CHANGE_ME_* values are rejected during deployment
-- existingSecret support for external secret management
+- `existingSecret` support for RADIUS, MySQL, and external MySQL credentials (separate secrets)
+- Backup CronJob uses chart's ServiceAccount and `imagePullSecrets` for private registries
+- ServiceAccount with `automountServiceAccountToken: false` (least privilege)
+- RBAC Role with empty rules (no API server access)
 - StartupProbe gives MySQL 5 minutes for first boot
 - Init container has 300s timeout
 - Use external MySQL for high availability
 - Configure appropriate resource limits
-- Set up monitoring and alerting
+- Set up monitoring and alerting (requires exporter sidecar for Prometheus)
 - Use proper TLS certificates
 - Configure network policies for security
 - Enable pod disruption budgets (enabled by default)
