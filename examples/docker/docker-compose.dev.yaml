@@ -20,6 +20,22 @@ services:
       retries: 12
       start_period: 120s
 
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    restart: unless-stopped
+    container_name: radius-redis-dev
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    networks:
+      - radius-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   freeradius:
     build:
       context: ../../
@@ -45,6 +61,11 @@ services:
       MYSQL_TLS_CERT: ${MYSQL_TLS_CERT:-}
       MYSQL_TLS_KEY: ${MYSQL_TLS_KEY:-}
       TZ: ${TZ:-Asia/Jakarta}
+      ACCT_REDIS_ENABLED: ${ACCT_REDIS_ENABLED:-false}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "0"
     ports:
       - "1812:1812/udp"
       - "1813:1813/udp"
@@ -75,3 +96,4 @@ networks:
 volumes:
   db_data:
   radius_config:
+  redis_data:

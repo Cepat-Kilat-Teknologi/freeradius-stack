@@ -11,3 +11,4 @@ data:
   MYSQL_DBNAME: {{ include "freeradius.mysql.database" . | quote }}
   TZ: {{ .Values.global.timezone | quote }}
   RADIUS_CLIENTS: {{ .Values.freeradius.clients | quote }}
+  ACCT_REDIS_ENABLED: {{ if or .Values.redis.enabled .Values.externalRedis.host }}"true"{{ else }}"false"{{ end }}

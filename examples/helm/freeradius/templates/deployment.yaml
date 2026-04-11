@@ -133,6 +133,23 @@ spec:
                 secretKeyRef:
                   name: {{ include "freeradius.secretName" . }}
                   key: healthcheck-secret
+            {{- if or .Values.redis.enabled .Values.externalRedis.host }}
+            - name: ACCT_REDIS_ENABLED
+              value: "true"
+            - name: REDIS_HOST
+              value: {{ if .Values.redis.enabled }}{{ include "freeradius.fullname" . }}-redis{{ else }}{{ .Values.externalRedis.host }}{{ end }}
+            - name: REDIS_PORT
+              value: {{ if .Values.redis.enabled }}"6379"{{ else }}{{ .Values.externalRedis.port | quote }}{{ end }}
+            - name: REDIS_DB
+              value: {{ if .Values.redis.enabled }}{{ .Values.redis.database | quote }}{{ else }}{{ .Values.externalRedis.database | quote }}{{ end }}
+            {{- if or .Values.redis.password .Values.externalRedis.password }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freeradius.fullname" . }}
+                  key: redis-password
+            {{- end }}
+            {{- end }}
           {{- with .Values.freeradius.extraEnv }}
           {{- toYaml . | nindent 12 }}
           {{- end }}

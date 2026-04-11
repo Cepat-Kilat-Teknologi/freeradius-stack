@@ -72,6 +72,14 @@ if [[ -n "$TZ" ]]; then
     echo "$TZ" > /etc/timezone
 fi
 
+# Redis accounting configuration (optional, default: disabled)
+# When enabled, Interim-Update packets are buffered in Redis for batch processing
+ACCT_REDIS_ENABLED="${ACCT_REDIS_ENABLED:-false}"
+REDIS_HOST="${REDIS_HOST:-redis}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+REDIS_DB="${REDIS_DB:-0}"
+
 # Warn if HEALTHCHECK_SECRET is still the default value
 if [[ "$HEALTHCHECK_SECRET" == "testing123" ]] || [[ "$HEALTHCHECK_SECRET" == "CHANGE_ME_HEALTHCHECK_SECRET" ]]; then
     echo "WARNING: HEALTHCHECK_SECRET is using default value. Set a unique value in production." >&2
@@ -97,6 +105,26 @@ if [[ "$mysql_ready" != "true" ]]; then
     exit 1
 fi
 
+# Wait for Redis if accounting Redis is enabled
+if [[ "$ACCT_REDIS_ENABLED" == "true" ]]; then
+    echo "Redis accounting enabled. Waiting for Redis..."
+    redis_ready=false
+    for i in {1..15}; do
+        if (echo -e "PING\r" | timeout 3 bash -c "exec 3<>/dev/tcp/$REDIS_HOST/$REDIS_PORT; cat >&3; head -1 <&3") 2>/dev/null | grep -q PONG; then
+            echo "Redis is ready."
+            redis_ready=true
+            break
+        fi
+        echo "  Waiting for Redis ($i/15)..."
+        sleep 2
+    done
+
+    if [[ "$redis_ready" != "true" ]]; then
+        echo "Warning: Redis not available. Accounting will fall back to SQL only." >&2
+        ACCT_REDIS_ENABLED="false"
+    fi
+fi
+
 # Function to check if schema already exists
 schema_exists() {
     local table_count
@@ -117,6 +145,25 @@ acquire_db_lock() {
 release_db_lock() {
     local lock_name="freeradius_init_lock"
     mysql --defaults-extra-file="$MYSQL_CREDS_FILE" $MYSQL_SSL_OPTS --connect-timeout=10 -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" -N -e "SELECT RELEASE_LOCK('$lock_name');" &>/dev/null || true
+}
+
+# Run post-schema migrations (InnoDB conversion, additional indexes)
+# Safe to run multiple times - ALTER TABLE ENGINE=InnoDB is a no-op if already InnoDB,
+# CREATE INDEX will fail silently with --force if index already exists.
+run_post_schema_migrations() {
+    local migration_file="/entrypoint-post-schema.sql"
+    if [[ ! -f "$migration_file" ]]; then
+        echo "No post-schema migration file found. Skipping."
+        return 0
+    fi
+
+    echo "Running post-schema migrations..."
+    if mysql --defaults-extra-file="$MYSQL_CREDS_FILE" $MYSQL_SSL_OPTS --connect-timeout=10 \
+        --force -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" "$MYSQL_DBNAME" < "$migration_file" 2>&1; then
+        echo "Post-schema migrations applied successfully."
+    else
+        echo "Post-schema migrations completed (some statements may have been skipped as already applied)."
+    fi
 }
 
 # Use local file lock for config modifications (per-container)
@@ -160,6 +207,7 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
     if [[ -z "$DO_NOT_IMPORT_DB" ]]; then
         if schema_exists; then
             echo "Database schema already exists. Skipping import."
+            run_post_schema_migrations
         else
             echo "Acquiring database lock for schema import..."
             if acquire_db_lock; then
@@ -174,6 +222,7 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
                         exit 1
                     fi
                     echo "Database schema imported successfully."
+                    run_post_schema_migrations
                 fi
                 release_db_lock
             else
@@ -219,6 +268,68 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
             -e 's|^[[:space:]]*#[[:space:]]*read_clients = yes|        read_clients = yes|' \
             -e 's|^[[:space:]]*#[[:space:]]*client_table = "nas"|        client_table = "nas"|' \
             mods-enabled/sql
+    fi
+
+    # Redis module configuration (only when ACCT_REDIS_ENABLED=true)
+    if [[ "$ACCT_REDIS_ENABLED" == "true" ]]; then
+        echo "Configuring Redis accounting module..."
+
+        # Enable redis module
+        if [[ -f "mods-available/redis" ]] && [[ ! -L "mods-enabled/redis" ]]; then
+            ln -sf "${RADDB_DIR}/mods-available/redis" "${RADDB_DIR}/mods-enabled/redis"
+        fi
+
+        # Configure redis module connection
+        if [[ -f "mods-enabled/redis" ]]; then
+            escaped_redis_host=$(escape_for_sed "$REDIS_HOST")
+            escaped_redis_port=$(escape_for_sed "$REDIS_PORT")
+
+            sed -Ei \
+                -e "s|^([[:space:]]*)#?[[:space:]]*server[[:space:]]*=.*|\1server = \"${escaped_redis_host}\"|" \
+                -e "s|^([[:space:]]*)#?[[:space:]]*port[[:space:]]*=.*|\1port = ${escaped_redis_port}|" \
+                -e "s|^([[:space:]]*)#?[[:space:]]*database[[:space:]]*=.*|\1database = ${REDIS_DB}|" \
+                mods-enabled/redis
+
+            if [[ -n "$REDIS_PASSWORD" ]]; then
+                escaped_redis_password=$(escape_for_sed "$REDIS_PASSWORD")
+                sed -Ei "s|^([[:space:]]*)#?[[:space:]]*password[[:space:]]*=.*|\1password = \"${escaped_redis_password}\"|" mods-enabled/redis
+            fi
+        fi
+
+        # Create custom accounting config: Interim-Update → Redis, Start/Stop → SQL
+        cat > "${RADDB_DIR}/custom/acct-redis.conf" <<'ACCTEOF'
+# Redis accounting for Interim-Update packets
+# Format: pipe-delimited fields for flush worker parsing
+# Fields: AcctUniqueId|AcctSessionId|UserName|NASIPAddress|NASPortId|EventTimestamp|
+#         AcctSessionTime|AcctInputOctets|AcctOutputOctets|AcctInputGigawords|
+#         AcctOutputGigawords|FramedIPAddress|FramedIPv6Address|FramedIPv6Prefix|
+#         FramedInterfaceId|DelegatedIPv6Prefix
+ACCTEOF
+
+        # Patch sites-enabled/default: comment out accounting block and add Redis version
+        if ! grep -q "acct-redis" "sites-enabled/default" 2>/dev/null; then
+            # Add Redis accounting policy to the accounting section
+            # We use unlang to route Interim-Update to Redis, everything else to SQL
+            sed -Ei '/^accounting \{/,/^\}/ {
+                s/^([[:space:]]*)(-?)sql$/\1# \2sql  # [redis-override] replaced by Redis accounting below/
+            }' sites-enabled/default
+
+            # Append Redis accounting logic before the closing } of accounting section
+            sed -Ei '/^accounting \{/,/^\}/ {
+                /^\}/ i\
+\t# [acct-redis] Interim-Update → Redis buffer, Start/Stop → SQL\
+\tif (&Acct-Status-Type == "Interim-Update") {\
+\t\tupdate control {\
+\t\t\t\&Tmp-String-0 := "%{redis:RPUSH radius:acct:interim %{Acct-Unique-Session-Id}|%{Acct-Session-Id}|%{User-Name}|%{%{NAS-IPv6-Address}:-%{NAS-IP-Address}}|%{%{NAS-Port-ID}:-%{NAS-Port}}|%{integer:Event-Timestamp}|%{Acct-Session-Time}|%{Acct-Input-Octets}|%{Acct-Output-Octets}|%{Acct-Input-Gigawords}|%{Acct-Output-Gigawords}|%{Framed-IP-Address}|%{Framed-IPv6-Address}|%{Framed-IPv6-Prefix}|%{Framed-Interface-Id}|%{Delegated-IPv6-Prefix}"\
+\t\t}\
+\t}\
+\telse {\
+\t\t-sql\
+\t}
+            }' sites-enabled/default
+        fi
+
+        echo "Redis accounting configured. Interim-Update → Redis, Start/Stop → SQL"
     fi
 
     # Escape RADIUS_SECRET for FreeRADIUS config (handles " and \ inside quoted strings)

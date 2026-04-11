@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Post-schema migration system: automatically applies InnoDB conversion and composite indexes after FreeRADIUS default schema import
+- Optional Redis accounting: buffer Interim-Update packets in Redis for batch processing (`ACCT_REDIS_ENABLED=true`)
+- Redis service in Docker Compose (always available, accounting opt-in via env var)
+- Redis Deployment and Service for Kubernetes
+- Redis StatefulSet for Helm chart with persistence and external Redis support
+- New environment variables: `ACCT_REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB`
+- `freeradius-redis` package in Docker image for `rlm_redis` module
+
 ### Changed
+
+- Tables `radcheck`, `radreply`, `radusergroup`, `radgroupcheck`, `radgroupreply` converted from MyISAM to InnoDB (enables transactions, row-level locking, crash recovery)
+- Added composite indexes: `radusergroup(username, groupname)`, `radgroupcheck(groupname, attribute)`, `radgroupreply(groupname, attribute)`, `radacct(username, acctstoptime)`, `radpostauth(authdate)`
 
 - Upgraded FreeRADIUS to 3.2.8 from Debian sid with apt pinning
 - Replaced all `:latest` image tags with semantic versioning (`3.2.8`)

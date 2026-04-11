@@ -170,6 +170,26 @@ spec:
                 secretKeyRef:
                   name: freeradius-secret
                   key: healthcheck-secret
+            - name: ACCT_REDIS_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: ACCT_REDIS_ENABLED
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: REDIS_PORT
+            - name: REDIS_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: freeradius-config
+                  key: REDIS_DB
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
