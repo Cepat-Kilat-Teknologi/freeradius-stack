@@ -194,6 +194,11 @@ jobs:
           HEALTHCHECK_SECRET=testing123
           TZ=UTC
           RADIUS_ALLOW_PRIVATE_NETWORKS=true
+          ACCT_REDIS_ENABLED=false
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          REDIS_PASSWORD=
+          REDIS_DB=0
           EOF
           # Strip leading whitespace from .env
           sed -i 's/^[[:space:]]*//' .env
@@ -209,7 +214,7 @@ jobs:
             HEALTHY=$(docker compose ps --format json | grep -c '"healthy"' || true)
             TOTAL=$(docker compose ps --format json | wc -l | tr -d ' ')
             echo "  Healthy: $HEALTHY / $TOTAL ($i/90)"
-            if [ "$HEALTHY" -ge 2 ] 2>/dev/null; then
+            if [ "$HEALTHY" -ge 3 ] 2>/dev/null; then
               echo "All services are healthy!"
               break
             fi
