@@ -1,0 +1,96 @@
+{{- if .Values.redis.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "freeradius.fullname" . }}-redis
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  serviceName: {{ include "freeradius.fullname" . }}-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "freeradius.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "freeradius.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          command:
+            - redis-server
+            - --appendonly
+            - "yes"
+            - --maxmemory
+            - "128mb"
+            - --maxmemory-policy
+            - noeviction
+            {{- if .Values.redis.password }}
+            - --requirepass
+            - "$(REDIS_PASSWORD)"
+            {{- end }}
+          {{- if .Values.redis.password }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freeradius.fullname" . }}
+                  key: redis-password
+          {{- end }}
+          ports:
+            - containerPort: 6379
+              name: redis
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          {{- if .Values.redis.persistence.enabled }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          {{- end }}
+  {{- if .Values.redis.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: [ "{{ .Values.redis.persistence.accessMode }}" ]
+        {{- if .Values.redis.persistence.storageClass }}
+        storageClassName: "{{ .Values.redis.persistence.storageClass }}"
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.redis.persistence.size }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "freeradius.fullname" . }}-redis
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  selector:
+    {{- include "freeradius.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+  clusterIP: None
+{{- end }}

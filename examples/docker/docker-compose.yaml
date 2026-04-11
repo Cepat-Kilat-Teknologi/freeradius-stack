@@ -30,6 +30,41 @@ services:
           memory: 512M
           cpus: "1.0"
 
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    restart: unless-stopped
+    container_name: radius-redis
+    command: >
+      sh -c '
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction
+        else
+          redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction
+        fi
+      '
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+    networks:
+      - radius-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
   freeradius:
     image: ${FREERADIUS_IMAGE:-cepatkilatteknologi/freeradius:3.2.8}
     container_name: freeradius
@@ -53,6 +88,11 @@ services:
       MYSQL_TLS_KEY: ${MYSQL_TLS_KEY:-}
       HEALTHCHECK_SECRET: ${HEALTHCHECK_SECRET:-testing123}
       TZ: ${TZ:-Asia/Jakarta}
+      ACCT_REDIS_ENABLED: ${ACCT_REDIS_ENABLED:-false}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
     ports:
       - "1812:1812/udp"
       - "1813:1813/udp"
@@ -88,3 +128,4 @@ networks:
 volumes:
   db_data:
   radius_config:
+  redis_data:

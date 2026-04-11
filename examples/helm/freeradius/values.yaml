@@ -220,3 +220,45 @@ metrics:
     enabled: false
     interval: "30s"
     labels: {}
+
+# Redis configuration (for optional accounting buffering)
+redis:
+  # Set to true to enable Redis accounting
+  # Interim-Update packets will be buffered in Redis
+  enabled: false
+
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+
+  # Redis password (leave empty for no auth)
+  password: ""
+
+  # Use an existing secret for Redis password
+  existingSecret: ""
+
+  # Redis database number
+  database: 0
+
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+# External Redis configuration (when redis.enabled=false but accounting is needed)
+externalRedis:
+  host: ""
+  port: 6379
+  password: ""
+  database: 0
+  existingSecret: ""

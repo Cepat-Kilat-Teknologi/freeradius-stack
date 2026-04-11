@@ -15,3 +15,8 @@ data:
   RADIUS_CLIENTS: ""
   # Set to "true" to allow all RFC 1918 private networks as RADIUS clients
   RADIUS_ALLOW_PRIVATE_NETWORKS: "false"
+  # Redis accounting (set ACCT_REDIS_ENABLED to "true" to enable)
+  ACCT_REDIS_ENABLED: "false"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"

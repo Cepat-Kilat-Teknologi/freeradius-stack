@@ -11,6 +11,7 @@ resources:
   - rbac.yaml
   - mysql-statefulset.yaml
   - freeradius-deployment.yaml
+  - redis-deployment.yaml
   - backup-cronjob.yaml
   - networkpolicy.yaml
   - pdb.yaml

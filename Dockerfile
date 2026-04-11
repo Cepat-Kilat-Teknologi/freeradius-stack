@@ -32,6 +32,7 @@ RUN echo "deb http://deb.debian.org/debian sid main" > /etc/apt/sources.list.d/s
 RUN apt-get update && apt-get install -y --no-install-recommends \
     freeradius \
     freeradius-mysql \
+    freeradius-redis \
     freeradius-utils \
     mariadb-client \
     gosu \
@@ -55,6 +56,7 @@ RUN usermod -aG freerad root \
 
 # Copy entrypoint and set permissions
 COPY --link --chmod=755 scripts/entrypoint.sh /entrypoint.sh
+COPY --link scripts/post-schema.sql /entrypoint-post-schema.sql
 
 EXPOSE 1812/udp 1813/udp
 

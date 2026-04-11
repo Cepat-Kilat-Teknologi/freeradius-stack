@@ -11,3 +11,6 @@ backups/
 # Database dumps (prevent accidental commit of sensitive data)
 **/*.sql.gz
 **/*.sql
+
+# Allow SQL migration scripts
+!scripts/*.sql
