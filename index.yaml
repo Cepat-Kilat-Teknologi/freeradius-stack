@@ -3,9 +3,9 @@ entries:
   freeradius:
   - apiVersion: v2
     appVersion: 3.2.8
-    created: "2026-04-05T08:49:56.315396293Z"
+    created: "2026-04-11T05:08:13.478365995Z"
     description: A Helm chart for FreeRADIUS with MySQL backend
-    digest: 9337c9b3a8db30d789199afc00eff5a010b6c3a79f0687ab5c10c43670a356d6
+    digest: 8ff880cf6eabfca94ac7fb87abfdaeea4b4d0f4975b06dc822a2b70668b24823
     home: https://github.com/Cepat-Kilat-Teknologi/freeradius-stack
     keywords:
     - freeradius
@@ -23,4 +23,4 @@ entries:
     urls:
     - https://cepat-kilat-teknologi.github.io/freeradius-stack/freeradius-1.0.0.tgz
     version: 1.0.0
-generated: "2026-04-05T08:49:56.3139222Z"
+generated: "2026-04-11T05:08:13.477352883Z"
