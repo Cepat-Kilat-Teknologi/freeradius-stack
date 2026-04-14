@@ -200,7 +200,72 @@ if [[ -f "sites-available/status" ]]; then
     sed -Ei "/client admin/,/\}/s/secret = .*/secret = ${escaped_healthcheck_secret}/" "sites-available/status"
 fi
 
-# Only do full initialization if local lock doesn't exist
+# =============================================================================
+# SQL module config substitution (RUNS ON EVERY START)
+# =============================================================================
+# This block intentionally lives OUTSIDE the LOCAL_LOCK_FILE guard below.
+# Reason: when the freeradius image is rebuilt or the container is recreated
+# (e.g. `docker compose up -d --build`), the new container starts with a
+# fresh writable layer where mods-available/sql is the IMAGE default
+# (dialect=sqlite, driver=rlm_sql_null). The lock file is persisted on the
+# `freeradius_config` volume, so it survives the recreate. If the SQL
+# substitution were gated by the lock, the new container would skip the
+# substitution and FreeRADIUS would boot with the null driver — silently
+# losing all SQL functionality (clients from `nas` table not loaded, NAS
+# auth requests rejected as "unknown client", `radcheck` lookups bypassed).
+#
+# Idempotency: we detect whether the file has already been configured by
+# checking for the substituted `dialect = "mysql"` marker. If present, the
+# substitution has already run on a previous start and we skip the sed
+# block to avoid double-application (notably the TLS-section commenting
+# pass, which is non-idempotent because BusyBox sed lacks an easy way to
+# express "comment only if not already commented" without nested {} blocks
+# that have edge cases on closing braces).
+#
+# We patch `mods-available/sql` directly (not the `mods-enabled/sql`
+# symlink) because BusyBox `sed -i` REPLACES symlinks with regular files
+# instead of following them, which on a subsequent restart would be
+# clobbered by the `ln -sf` re-symlink step above. Patching the underlying
+# file keeps the symlink stable.
+
+echo "Enabling SQL module in sites-enabled/default..."
+if [[ -f "sites-enabled/default" ]]; then
+    sed -Ei 's/#[\t ]*sql$/sql/g' sites-enabled/default
+fi
+
+if [[ -f "mods-available/sql" ]]; then
+    if grep -qE '^\s*dialect = "mysql"' mods-available/sql; then
+        echo "SQL config already substituted with mysql dialect, skipping sed pass."
+    else
+        echo "Updating SQL config with environment..."
+        # Comment out TLS section for MySQL only when TLS is not configured.
+        # If MYSQL_TLS_CA is set, keep the TLS section for secure connections.
+        if [[ -z "${MYSQL_TLS_CA:-}" ]]; then
+            sed -Ei '/mysql \{/,/^\t\}/ { /tls \{/,/^\t\t\}/ s/^/#/ }' mods-available/sql
+        fi
+
+        # Escape special characters in environment variables for sed
+        escaped_mysql_host=$(escape_for_sed "$MYSQL_HOST")
+        escaped_mysql_port=$(escape_for_sed "$MYSQL_PORT")
+        escaped_mysql_user=$(escape_for_sed "$MYSQL_USER")
+        escaped_mysql_password=$(escape_for_sed "$MYSQL_PASSWORD")
+        escaped_mysql_dbname=$(escape_for_sed "$MYSQL_DBNAME")
+
+        sed -Ei \
+            -e "s|^([[:space:]]*)#?[[:space:]]*server[[:space:]]*=.*|\1server = \"${escaped_mysql_host}\"|" \
+            -e "s|^([[:space:]]*)#?[[:space:]]*port[[:space:]]*=.*|\1port = ${escaped_mysql_port}|" \
+            -e "s|^([[:space:]]*)#?[[:space:]]*login[[:space:]]*=.*|\1login = \"${escaped_mysql_user}\"|" \
+            -e "s|^([[:space:]]*)#?[[:space:]]*password[[:space:]]*=.*|\1password = \"${escaped_mysql_password}\"|" \
+            -e "s|dialect = \"sqlite\"|dialect = \"mysql\"|" \
+            -e "s|driver = \"rlm_sql_[^\"]*\"|driver = \"rlm_sql_mysql\"|" \
+            -e "s|radius_db = \"radius\"|radius_db = \"${escaped_mysql_dbname}\"|" \
+            -e 's|^[[:space:]]*#[[:space:]]*read_clients = yes|        read_clients = yes|' \
+            -e 's|^[[:space:]]*#[[:space:]]*client_table = "nas"|        client_table = "nas"|' \
+            mods-available/sql
+    fi
+fi
+
+# Only do schema import if local lock doesn't exist (expensive, one-shot).
 if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
 
     # Database schema import with distributed locking
@@ -234,40 +299,6 @@ if [[ ! -f "$LOCAL_LOCK_FILE" ]]; then
                 fi
             fi
         fi
-    fi
-
-    echo "Enabling SQL module in sites-enabled/default..."
-    if [[ -f "sites-enabled/default" ]]; then
-        sed -Ei 's/#[\t ]*sql$/sql/g' sites-enabled/default
-    fi
-
-    echo "Updating SQL config with environment..."
-    if [[ -f "mods-enabled/sql" ]]; then
-        # Comment out TLS section for MySQL only when TLS is not configured
-        # If MYSQL_TLS_CA is set, keep the TLS section for secure connections
-        if [[ -z "${MYSQL_TLS_CA:-}" ]]; then
-            # This is needed because the CA cert path doesn't exist when TLS is not configured
-            sed -Ei '/mysql \{/,/^\t\}/ { /tls \{/,/^\t\t\}/ s/^/#/ }' mods-enabled/sql
-        fi
-
-        # Escape special characters in environment variables for sed
-        escaped_mysql_host=$(escape_for_sed "$MYSQL_HOST")
-        escaped_mysql_port=$(escape_for_sed "$MYSQL_PORT")
-        escaped_mysql_user=$(escape_for_sed "$MYSQL_USER")
-        escaped_mysql_password=$(escape_for_sed "$MYSQL_PASSWORD")
-        escaped_mysql_dbname=$(escape_for_sed "$MYSQL_DBNAME")
-
-        sed -Ei \
-            -e "s|^([[:space:]]*)#?[[:space:]]*server[[:space:]]*=.*|\1server = \"${escaped_mysql_host}\"|" \
-            -e "s|^([[:space:]]*)#?[[:space:]]*port[[:space:]]*=.*|\1port = ${escaped_mysql_port}|" \
-            -e "s|^([[:space:]]*)#?[[:space:]]*login[[:space:]]*=.*|\1login = \"${escaped_mysql_user}\"|" \
-            -e "s|^([[:space:]]*)#?[[:space:]]*password[[:space:]]*=.*|\1password = \"${escaped_mysql_password}\"|" \
-            -e "s|dialect = \"sqlite\"|dialect = \"mysql\"|" \
-            -e "s|driver = \"rlm_sql_[^\"]*\"|driver = \"rlm_sql_mysql\"|" \
-            -e "s|radius_db = \"radius\"|radius_db = \"${escaped_mysql_dbname}\"|" \
-            -e 's|^[[:space:]]*#[[:space:]]*read_clients = yes|        read_clients = yes|' \
-            -e 's|^[[:space:]]*#[[:space:]]*client_table = "nas"|        client_table = "nas"|' \
-            mods-enabled/sql
     fi
 
     # Redis module configuration (only when ACCT_REDIS_ENABLED=true)
