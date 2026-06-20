@@ -15,6 +15,12 @@ spec:
   loadBalancerSourceRanges:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- if and (ne .Values.freeradius.service.type "ClusterIP") .Values.freeradius.service.externalTrafficPolicy }}
+  # Preserve the real NAS source IP so per-NAS secrets in the `nas` table match
+  # and FreeRADIUS can identify which BNG/NAS each request came from. Without
+  # this, kube-proxy SNATs the packet and FreeRADIUS sees the node IP instead.
+  externalTrafficPolicy: {{ .Values.freeradius.service.externalTrafficPolicy }}
+  {{- end }}
   ports:
     - port: {{ .Values.freeradius.service.ports.auth }}
       targetPort: radius-auth

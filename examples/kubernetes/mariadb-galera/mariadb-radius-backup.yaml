@@ -1,0 +1,28 @@
+# Scheduled logical backups of the MariaDB Galera `radius` database.
+# Managed by mariadb-operator -> creates a CronJob that dumps to a Longhorn PVC.
+# No external credentials are used (PVC target), so nothing sensitive is stored
+# in this manifest. For off-cluster durability, switch storage to S3 and supply
+# credentials via a Secret reference (NOT inline).
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: Backup
+metadata:
+  name: mariadb-radius-backup
+  namespace: databases
+spec:
+  mariaDbRef:
+    name: mariadb-radius
+  # Daily at 02:00. Keep 7 days of backups.
+  schedule:
+    cron: "0 2 * * *"
+  maxRetention: 168h
+  # Backup pod must land on a Longhorn (storage) node to attach the PVC.
+  nodeSelector:
+    storage: "true"
+  storage:
+    persistentVolumeClaim:
+      storageClassName: longhorn
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
