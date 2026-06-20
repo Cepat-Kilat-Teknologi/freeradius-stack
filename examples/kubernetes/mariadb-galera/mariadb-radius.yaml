@@ -1,0 +1,73 @@
+# 3-node MariaDB Galera cluster for the FreeRADIUS `radius` database.
+# Managed by mariadb-operator (ns: databases). Provides a single stable
+# `mariadb-radius-primary` Service for FreeRADIUS (externalMysql.host).
+#
+# Sizing targets PRODUCTION ~10K PPPoE users (radacct/radpostauth grow to GB
+# scale over time; storage is expandable). NOT sized for the current dev data.
+#
+# Placement note: Longhorn is NETWORK block storage — the DB pods do NOT need to
+# run on the storage nodes (worker1a/2a/3a). Data replicas live on those storage
+# nodes; the MariaDB pods schedule on whatever workers have CPU/RAM headroom
+# (the storage nodes are already 90-99% CPU-requested). Galera gives synchronous
+# HA (tolerates 1 node loss, quorum 2/3); anti-affinity spreads the 3 pods.
+#
+# Secret `mariadb-radius-secret` (root-password, password) is created out-of-band
+# (kubectl), NOT committed here.
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: MariaDB
+metadata:
+  name: mariadb-radius
+  namespace: databases
+spec:
+  rootPasswordSecretKeyRef:
+    name: mariadb-radius-secret
+    key: root-password
+  username: radius
+  passwordSecretKeyRef:
+    name: mariadb-radius-secret
+    key: password
+  database: radius
+
+  replicas: 3
+  galera:
+    enabled: true
+
+  storage:
+    size: 100Gi
+    storageClassName: longhorn
+    resizeInUseVolumes: true
+
+  # Longhorn is only registered on the storage nodes (worker1a/2a/3a) — its
+  # volumes can ONLY attach to pods running there. So the DB pods MUST be pinned
+  # to those nodes. One Galera pod per storage node (anti-affinity).
+  nodeSelector:
+    storage: "true"
+  affinity:
+    antiAffinityEnabled: true
+
+  # Production sizing for ~10K users. CPU request kept small because the storage
+  # nodes are heavily over-RESERVED (≈99% requested, ~19% actual); limits + buffer
+  # pool are sized for real load. For sustained 10K, give the DB dedicated nodes.
+  resources:
+    requests:
+      cpu: 200m
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+
+  myCnf: |
+    [mariadb]
+    bind-address=*
+    default_storage_engine=InnoDB
+    innodb_buffer_pool_size=4G
+    innodb_log_file_size=512M
+    innodb_flush_log_at_trx_commit=2
+    innodb_file_per_table=1
+    max_connections=1000
+    max_allowed_packet=256M
+    character-set-server=utf8mb4
+    collation-server=utf8mb4_unicode_ci
+
+  service:
+    type: ClusterIP

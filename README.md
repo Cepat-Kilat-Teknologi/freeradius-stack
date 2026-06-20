@@ -1,6 +1,77 @@
 # FreeRADIUS Stack
 
-Production-ready FreeRADIUS deployment with MySQL backend. Supports Docker Compose, Kubernetes, and Helm.
+Production-ready FreeRADIUS deployment with a SQL backend. Supports Docker Compose,
+Kubernetes (raw manifests), and Helm.
+
+## What is this for?
+
+This stack is the **AAA / RADIUS control plane** for an ISP / broadband network. It
+authenticates and accounts for subscribers (PPPoE, IPoE, Hotspot) that terminate on
+your NAS / BNG devices — MikroTik, [accel-ppp](https://accel-ppp.org/), Cisco,
+Juniper, etc. Concretely it provides:
+
+- **Authentication** — `Access-Request` from the NAS is checked against the `radcheck`
+  / `radusergroup` tables (per-user credentials, group/plan attributes).
+- **Authorization** — reply attributes (rate-limit, IP/pool, VLAN) returned to the NAS.
+- **Accounting** — session Start/Interim/Stop written to `radacct` for usage/quota.
+- **CoA / Disconnect** — the NAS is the CoA target (UDP 3799); a management layer
+  (e.g. `freeradius-api`) sends Disconnect-Message / Change-of-Authorization to
+  kick, suspend, or change a subscriber's plan live.
+
+It is the data/auth tier — it does **not** terminate PPPoE itself. The NAS/BNG (e.g.
+accel-ppp on bare metal) does that and talks RADIUS to this stack.
+
+## Architecture
+
+```
+  Subscribers (PPPoE/IPoE)
+        │
+        ▼
+  NAS / BNG  (MikroTik · accel-ppp · Cisco · Juniper)
+        │  RADIUS auth/acct (UDP 1812/1813)        ▲ CoA/Disconnect (UDP 3799)
+        ▼                                          │
+  ┌─────────────────────────────────────────────────────────┐
+  │  FreeRADIUS  (this stack, N stateless replicas)          │
+  │  - externalTrafficPolicy: Local → preserves NAS source IP │
+  │    so per-NAS secrets in the `nas` table match            │
+  └───────────────┬───────────────────────┬───────────────────┘
+                  │ SQL                    │ Redis (optional)
+                  ▼                        ▼
+        MariaDB / MySQL              Redis (Interim-Update
+        (radius DB: radcheck,        buffer; drained to SQL
+         radacct, nas, …)            by an external worker)
+                  ▲
+                  │ reads/writes (users, plans, sessions) + sends CoA to the NAS
+        ┌─────────┴─────────┐
+        │  freeradius-api    │  management API / billing integration
+        │  (separate repo)   │  + acctflush worker (Redis → radacct)
+        └────────────────────┘
+```
+
+**Database options**
+
+| Mode | When | How |
+|------|------|-----|
+| Bundled single DB | dev / small / single-node | default (`mysql.enabled=true`, or the raw `examples/kubernetes/` manifests) |
+| **External HA cluster** | **production** | point FreeRADIUS at an external **MariaDB Galera** (or MySQL InnoDB Cluster). See [`examples/kubernetes/mariadb-galera/`](examples/kubernetes/mariadb-galera/) and `examples/helm/freeradius/values-production.yaml` |
+
+The bundled DB is a **single pod = single point of failure** — fine for development,
+but production must use an external synchronous HA cluster. A 3-node Galera tolerates
+losing one node (quorum 2/3) and exposes one stable primary endpoint that FreeRADIUS
+(`externalMysql.host`) connects to.
+
+**Components**
+
+| Component | Role |
+|-----------|------|
+| FreeRADIUS 3.2.8 | RADIUS auth/acct server (stateless, scale horizontally) |
+| MariaDB Galera / MySQL | `radius` database (users, groups, NAS clients, accounting) |
+| Redis 7 (optional) | Interim-Update accounting buffer (spares the DB at scale) |
+
+> ⚠️ **Secrets never live in this repo.** RADIUS secret, DB passwords, and backup keys
+> are supplied at deploy time via Kubernetes Secrets / `--set` / a vault — see
+> [Security](#security-considerations). This is a public repository; do not commit
+> real credentials, internal IPs, or hostnames.
 
 ## Features
 
