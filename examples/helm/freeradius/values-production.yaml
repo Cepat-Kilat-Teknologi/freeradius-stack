@@ -1,0 +1,152 @@
+# FreeRADIUS Helm Chart - Production Values (≈5000 PPPoE users, multi-NAS)
+#
+# Tuned for an ISP control-plane RADIUS serving thousands of subscribers across
+# multiple BNG/NAS nodes (e.g. several accel-ppp servers). Pairs with:
+#   - An EXTERNAL MySQL cluster (Galera / InnoDB Cluster) — NOT the bundled single pod.
+#   - An EXTERNAL Redis for the accounting interim buffer, drained by the
+#     freeradius-api `acctflush` worker (see README "Redis Accounting").
+#
+# Usage:
+#   helm upgrade --install freeradius ./examples/helm/freeradius \
+#     -f ./examples/helm/freeradius/values-production.yaml \
+#     --namespace freeradius --create-namespace \
+#     --set externalMysql.password=... \
+#     --set freeradius.secret=... \
+#     --set freeradius.healthcheckSecret=...
+#
+# NOTE: secrets above should come from a vault / Sealed Secrets / External Secrets
+# Operator in real production — pass `freeradius.existingSecret` instead of --set.
+
+global:
+  timezone: "Asia/Jakarta"
+
+freeradius:
+  # Fixed replica count — do NOT autoscale RADIUS on CPU (see autoscaling note).
+  # 3 gives N+1 across nodes; with externalTrafficPolicy: Local keep this >= the
+  # number of LB-advertising nodes so every node that receives traffic has a pod.
+  replicaCount: 3
+
+  image:
+    repository: cepatkilatteknologi/freeradius
+    # Pin to an immutable digest in production to avoid silent drift on a
+    # mutable tag (the live cluster sat 143 days on a moving :3.2.8 tag).
+    # tag: "3.2.8@sha256:<digest>"
+    tag: "3.2.8"
+    pullPolicy: IfNotPresent
+
+  # Provide via --set or existingSecret — never commit real secrets.
+  secret: "CHANGE_ME_RADIUS_SECRET"
+  healthcheckSecret: "CHANGE_ME_HEALTHCHECK_SECRET"
+  # existingSecret: freeradius-prod-secret
+
+  # Per-NAS secrets should live in the SQL `nas` table (read_clients=yes), not here.
+  clients: ""
+
+  service:
+    type: LoadBalancer
+    # CRITICAL for multi-NAS: preserve the real BNG source IP so the `nas` table
+    # lookup matches and per-NAS secrets work.
+    externalTrafficPolicy: Local
+    # Lock RADIUS down to your BNG/NAS management ranges. RADIUS over UDP is
+    # trivially spoofable/floodable if exposed to the internet.
+    loadBalancerSourceRanges:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+    ports:
+      auth: 1812
+      acct: 1813
+    # For an internal-only LB, set the cloud-specific annotation, e.g.:
+    # annotations:
+    #   metallb.universe.tf/address-pool: radius-internal
+    annotations: {}
+
+  # Sized for ~5000 users. Auth is light; headroom is for accounting bursts and
+  # concurrent reconnect storms (e.g. after an OLT/uplink flap).
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "2000m"
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+  # Keep HPA OFF. RADIUS load is DB/PPS-bound, not pod-CPU-bound — scaling pods on
+  # CPU adds replicas that all hit the same MySQL, which is the real bottleneck.
+  autoscaling:
+    enabled: false
+
+# ---------------------------------------------------------------------------
+# Bundled MySQL is a SINGLE pod (replicas: 1) — a single point of failure.
+# DISABLE it and point at an external HA cluster (Galera / Percona XtraDB /
+# MySQL InnoDB Cluster). This is mandatory for 5000-user production.
+# ---------------------------------------------------------------------------
+mysql:
+  enabled: false
+
+externalMysql:
+  host: "mysql-galera.db.svc.cluster.local"   # <-- your HA endpoint / VIP
+  port: 3306
+  database: "radius"
+  user: "radius"
+  # password: provide via --set externalMysql.password=... or existingSecret
+  password: ""
+  # existingSecret: mysql-radius-credentials
+
+# ---------------------------------------------------------------------------
+# Redis accounting buffer. Interim-Update packets are buffered here to spare
+# MySQL write pressure, then drained to radacct by the freeradius-api
+# `acctflush` worker. REQUIRED: that worker must be running, or live
+# bandwidth/quota data silently never lands in MySQL. Monitor LLEN radius:acct:interim.
+# Use an external HA Redis (Sentinel) in production rather than the bundled pod.
+# ---------------------------------------------------------------------------
+redis:
+  enabled: false
+
+externalRedis:
+  host: "redis.cache.svc.cluster.local"        # <-- your Redis (Sentinel) endpoint
+  port: 6379
+  database: 0
+  # password: provide via --set externalRedis.password=... or existingSecret
+  password: ""
+  # existingSecret: redis-radius-credentials
+
+serviceAccount:
+  create: true
+
+rbac:
+  create: true
+
+podSecurityContext:
+  fsGroup: 101
+
+# Spread RADIUS pods across nodes (hard requirement so externalTrafficPolicy:
+# Local has a pod on each LB node and a node failure can't take >1 replica).
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: freeradius
+          topologyKey: kubernetes.io/hostname
+
+# Restrict pod traffic. NetworkPolicy template limits MySQL access to RADIUS +
+# backup pods; enable it in production.
+networkPolicy:
+  enabled: true
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: "30s"
+
+# Bundled-MySQL backups don't apply when mysql.enabled=false (back up at the
+# external cluster instead). Disable the in-chart backup CronJob.
+backup:
+  enabled: false

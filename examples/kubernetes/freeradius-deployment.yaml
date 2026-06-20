@@ -8,7 +8,13 @@ metadata:
     app.kubernetes.io/component: radius-server
 spec:
   type: LoadBalancer
-  # Uncomment to restrict source IPs (recommended for production):
+  # Preserve the real NAS source IP so per-NAS secrets in the `nas` table match
+  # and FreeRADIUS can tell which BNG/NAS each request came from. With the default
+  # "Cluster", kube-proxy SNATs the packet and FreeRADIUS sees the node IP instead.
+  # CAVEAT: "Local" only routes to nodes running a FreeRADIUS pod — keep replicas
+  # spread across LB nodes (topologySpreadConstraints below already does this).
+  externalTrafficPolicy: Local
+  # Uncomment to restrict source IPs (recommended for production — your BNG/NAS ranges):
   # loadBalancerSourceRanges:
   #   - 10.0.0.0/8
   #   - 192.168.0.0/16

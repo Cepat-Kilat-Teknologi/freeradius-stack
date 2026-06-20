@@ -324,6 +324,57 @@ docker compose exec -T db mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" \
 gunzip -c backup.sql.gz | docker compose exec -T db mysql -uroot -p"$MYSQL_ROOT_PASSWORD" radius
 ```
 
+## Redis Accounting (Interim-Update buffering)
+
+When `ACCT_REDIS_ENABLED=true`, FreeRADIUS routes **Interim-Update** packets to a
+Redis list (`radius:acct:interim`) instead of writing them straight to MySQL,
+which spares the database from high-frequency accounting writes at scale (e.g.
+thousands of PPPoE subscribers sending interim updates every few minutes).
+**Accounting-Start and Accounting-Stop always go directly to SQL** so session
+boundaries remain durable.
+
+> ⚠️ **Required external consumer.** This stack only *produces* to Redis. The
+> buffer is drained back into the `radacct` table by the **`acctflush` worker in
+> [freeradius-api](https://github.com/Cepat-Kilat-Teknologi/freeradius-api)**
+> (`internal/acctflush/worker.go`). If you enable `ACCT_REDIS_ENABLED=true`
+> **without** running that worker, interim data accumulates in Redis and **never
+> reaches MySQL** — live bandwidth/quota/usage figures will be silently stale even
+> though authentication and session start/stop keep working.
+
+### Operational requirements when enabled
+
+- **Run the freeradius-api `acctflush` worker** and confirm it is consuming
+  `radius:acct:interim`.
+- **Monitor the queue depth:** alert if it keeps growing (worker down or lagging):
+  ```bash
+  redis-cli LLEN radius:acct:interim
+  ```
+- **Size Redis memory** for your subscriber count. The bundled Redis is capped at
+  `maxmemory 128mb` with `noeviction` — correct policy (fail the write rather than
+  drop accounting data), but at thousands of users a stalled worker can fill it,
+  after which `RPUSH` fails and interim deltas are lost for that window (Start/Stop
+  stay safe in SQL). Increase `maxmemory` and keep `noeviction`.
+- **Known runtime trade-off:** if Redis goes down *after* startup, interim updates
+  have no SQL fallback (the unlang routes interim only to Redis). freeradius-api's
+  `radacct` usecase already degrades gracefully — live sessions just won't include
+  unflushed interim data until Redis returns. Start/Stop remain durable.
+- **Production:** prefer an external HA Redis (Sentinel) over the bundled single
+  pod (`redis.enabled=false` + `externalRedis.host=...`).
+
+## Kubernetes: preserve the NAS source IP (multi-NAS)
+
+The RADIUS `LoadBalancer` Service sets **`externalTrafficPolicy: Local`** (Helm
+default; also in the raw `examples/kubernetes/` Service). This preserves the real
+NAS/BNG source IP so per-NAS secrets in the SQL `nas` table match and FreeRADIUS
+can identify which NAS each request came from. With the Kubernetes default
+(`Cluster`), kube-proxy SNATs the packet and FreeRADIUS sees the node IP — every
+request then collapses onto the broad fallback client + single shared secret, and
+per-NAS secrets become impossible.
+
+> **Caveat:** `Local` only routes external traffic to nodes that are running a
+> FreeRADIUS pod. Keep `replicaCount` ≥ the number of LB-advertising nodes and rely
+> on the pod anti-affinity / topology spread so every receiving node has a pod.
+
 ## High Availability
 
 ### External MySQL Cluster

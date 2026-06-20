@@ -40,7 +40,16 @@ freeradius:
 
   service:
     type: LoadBalancer
-    # Restrict source IPs (recommended for production):
+    # externalTrafficPolicy: Local preserves the real NAS source IP (REQUIRED for
+    # multi-NAS / per-NAS-secret setups — e.g. multiple accel-ppp BNG nodes, each a
+    # distinct client in the `nas` table). With the default "Cluster", kube-proxy
+    # SNATs incoming RADIUS packets and FreeRADIUS sees the node IP, breaking
+    # per-NAS client/secret identification.
+    # CAVEAT: "Local" only routes to nodes that run a FreeRADIUS pod — keep
+    # replicaCount >= number of LB nodes and rely on topology spread / anti-affinity.
+    # Ignored automatically when service.type is ClusterIP (e.g. local dev).
+    externalTrafficPolicy: Local
+    # Restrict source IPs (recommended for production — set to your BNG/NAS ranges):
     # loadBalancerSourceRanges:
     #   - 10.0.0.0/8
     #   - 192.168.0.0/16
