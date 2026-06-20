@@ -113,7 +113,9 @@ spec:
               echo "MySQL is ready"
       containers:
         - name: freeradius
-          image: cepatkilatteknologi/freeradius:3.2.8
+          # Pinned to an immutable digest to prevent silent tag drift.
+          # Update both tag and digest together when bumping the image.
+          image: cepatkilatteknologi/freeradius:3.2.8@sha256:64f89ca51e40af22d59c7d930280e4dff9728a6570be61864cbcb76553095238
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 1812

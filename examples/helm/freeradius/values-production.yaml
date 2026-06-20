@@ -28,10 +28,9 @@ freeradius:
 
   image:
     repository: cepatkilatteknologi/freeradius
-    # Pin to an immutable digest in production to avoid silent drift on a
-    # mutable tag (the live cluster sat 143 days on a moving :3.2.8 tag).
-    # tag: "3.2.8@sha256:<digest>"
-    tag: "3.2.8"
+    # Pinned to an immutable digest to avoid silent drift on the moving :3.2.8 tag.
+    # Update the digest together with the tag when bumping the image.
+    tag: "3.2.8@sha256:64f89ca51e40af22d59c7d930280e4dff9728a6570be61864cbcb76553095238"
     pullPolicy: IfNotPresent
 
   # Provide via --set or existingSecret — never commit real secrets.
