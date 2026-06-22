@@ -44,6 +44,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create symlink for raddb compatibility
 RUN ln -sf /etc/freeradius/3.0 /etc/raddb
 
+# MariaDB-only: drop the unused SQL dialect templates shipped by the base package
+# (mongo/postgresql/mssql/oracle/ndb). The active dialect is mysql (MariaDB Galera);
+# keeping the others around only invites confusion.
+RUN rm -rf /etc/freeradius/3.0/mods-config/sql/main/mongo \
+           /etc/freeradius/3.0/mods-config/sql/main/postgresql \
+           /etc/freeradius/3.0/mods-config/sql/main/mssql \
+           /etc/freeradius/3.0/mods-config/sql/main/oracle \
+           /etc/freeradius/3.0/mods-config/sql/main/ndb
+
 # Fix permissions for hardened containers (cap_drop: ALL removes DAC_OVERRIDE).
 # Debian packages set /etc/freeradius to 2750 (freerad:freerad), which blocks
 # root from traversing or writing when DAC_OVERRIDE is dropped. The entrypoint

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Fail-closed authentication**: the `authorize` section now rejects any request that
+  reaches its end without a credential loaded from the database. Previously an unknown
+  user, or a degraded/unreachable SQL backend, could fall through to `Access-Accept`.
+  When no credential is known (user not provisioned, or SQL unavailable) the server now
+  rejects. Verified end to end: real user + correct password accepts, wrong password and
+  unknown users reject, and with the database stopped every request is rejected
+  (fail-closed) rather than accepted.
+- Removed the unused non-MySQL SQL dialect templates (mongo, postgresql, mssql, oracle,
+  ndb) from the image; the active backend is MySQL/MariaDB only.
+- Enabled authentication-result logging (`auth = yes`, `auth_badpass = yes`) for
+  auditability; passwords are never logged (`auth_goodpass` stays off).
+
 ### Added
 
 - Post-schema migration system: automatically applies InnoDB conversion and composite indexes after FreeRADIUS default schema import

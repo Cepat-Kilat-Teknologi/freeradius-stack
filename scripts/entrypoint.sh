@@ -231,6 +231,34 @@ fi
 echo "Enabling SQL module in sites-enabled/default..."
 if [[ -f "sites-enabled/default" ]]; then
     sed -Ei 's/#[\t ]*sql$/sql/g' sites-enabled/default
+
+    # SECURITY (fail-closed auth): reject any request that reaches the end of the
+    # `authorize` section without a credential loaded from the database. Without
+    # this guard an unknown user -- or a degraded SQL backend -- can fall through
+    # to Access-Accept. Fail-closed is the correct posture for an ISP: when no
+    # credential is known, reject. Idempotent across restarts.
+    if ! grep -q "fail-closed-auth" sites-enabled/default; then
+        echo "Hardening authorize: reject users without a database credential (fail-closed)..."
+        awk '
+            /^authorize[ \t]*\{/ { in_authz = 1 }
+            in_authz && /^\}/ {
+                print "\t# fail-closed-auth: no credential from the DB => reject (never accept-all)"
+                print "\tif (!&control:Cleartext-Password && !&control:Crypt-Password && !&control:NT-Password && !&control:Password-With-Header) {"
+                print "\t\treject"
+                print "\t}"
+                in_authz = 0
+            }
+            { print }
+        ' sites-enabled/default > sites-enabled/default.tmp && mv sites-enabled/default.tmp sites-enabled/default
+    fi
+fi
+
+# Observability: log every authentication result so security incidents are
+# auditable. auth_badpass records failed-password attempts; the password itself
+# is never logged (auth_goodpass stays off).
+if [[ -f "radiusd.conf" ]]; then
+    sed -Ei 's/^([[:space:]]*)auth[[:space:]]*=[[:space:]]*no/\1auth = yes/' radiusd.conf
+    sed -Ei 's/^([[:space:]]*)auth_badpass[[:space:]]*=[[:space:]]*no/\1auth_badpass = yes/' radiusd.conf
 fi
 
 if [[ -f "mods-available/sql" ]]; then
