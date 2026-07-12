@@ -53,6 +53,21 @@ spec:
         app.kubernetes.io/name: mysql
         app.kubernetes.io/component: database
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: storage
+                    operator: In
+                    values: ["true"]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: ["k3s-worker4a"]
       securityContext:
         fsGroup: 999
       containers:
