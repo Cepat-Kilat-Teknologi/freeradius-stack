@@ -26,7 +26,22 @@ ALTER TABLE radgroupcheck ENGINE=InnoDB;
 ALTER TABLE radgroupreply ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------------
--- 2. Add composite and covering indexes for freeradius-api query patterns
+-- 2. Widen undersized columns for MikroTik / ISP environments
+--
+-- The default FreeRADIUS schema defines nasportid as varchar(15), which is
+-- far too narrow for MikroTik NAS-Port-Id values that include interface
+-- descriptions (e.g. "714 - FO to WL SOKAWANGI - BOJONGBATA", 42 chars).
+-- Widen to varchar(128) to match the legacy production schema and provide
+-- headroom for long interface names.
+--
+-- ALTER TABLE MODIFY COLUMN is safe to re-run: if the column is already
+-- varchar(128), MariaDB/MySQL treats it as a no-op rebuild.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE radacct MODIFY COLUMN nasportid varchar(128) DEFAULT NULL;
+
+-- ---------------------------------------------------------------------------
+-- 3. Add composite and covering indexes for freeradius-api query patterns
 --
 -- These indexes do NOT exist in the default FreeRADIUS schema.
 -- They target the most common query patterns used by the REST API:
