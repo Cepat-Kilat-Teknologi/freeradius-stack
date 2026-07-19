@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **NAS whitelist tenant isolation**: entrypoint.sh injects unlang block in `authorize` section that checks the `user_nas_whitelist` table (managed by freeradius-api migration 000004) to restrict users to specific NAS/BNG devices. Users with whitelist entries can only authenticate from whitelisted NAS IPs; users without entries are unrestricted. Graceful degradation — if the table doesn't exist, authentication continues normally.
 - Post-schema migration system: automatically applies InnoDB conversion and composite indexes after FreeRADIUS default schema import
 - Optional Redis accounting: buffer Interim-Update packets in Redis for batch processing (`ACCT_REDIS_ENABLED=true`)
 - Redis service in Docker Compose (always available, accounting opt-in via env var)

@@ -85,6 +85,7 @@ losing one node (quorum 2/3) and exposes one stable primary endpoint that FreeRA
 - **Log rotation** to prevent disk bloat
 - **CI/CD** with GitHub Actions
 - **Security hardened** containers (non-root, capability drop, no-new-privileges)
+- **NAS whitelist tenant isolation** via unlang injection (multi-tenant NAS access control)
 - **NetworkPolicy** for pod traffic isolation
 - **MySQL TLS** support for encrypted database connections
 - **Backup encryption** with GPG
@@ -445,6 +446,66 @@ per-NAS secrets become impossible.
 > **Caveat:** `Local` only routes external traffic to nodes that are running a
 > FreeRADIUS pod. Keep `replicaCount` ≥ the number of LB-advertising nodes and rely
 > on the pod anti-affinity / topology spread so every receiving node has a pod.
+
+## NAS Whitelist Tenant Isolation
+
+For multi-tenant ISPs, users can be pinned to specific NAS/BNG devices so that
+Organization A's subscribers cannot authenticate on Organization B's NAS. This is
+enforced at the FreeRADIUS level via unlang in the `authorize` section.
+
+### How it works
+
+The entrypoint script (`scripts/entrypoint.sh`) injects an unlang block **after**
+the `sql` module call in `sites-enabled/default`. On every authentication request,
+FreeRADIUS runs two SQL queries against the `user_nas_whitelist` table (managed by
+[freeradius-api](https://github.com/Cepat-Kilat-Teknologi/freeradius-api) migration
+000004):
+
+```
+# Injected into authorize {} after "sql"
+# nas-whitelist-check: tenant isolation
+if ("%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username='%{User-Name}'}" != "0") {
+    if ("%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username='%{User-Name}' AND nasipaddress='%{NAS-IP-Address}'}" == "0") {
+        update reply {
+            &Reply-Message := "NAS not authorized for this user"
+        }
+        reject
+    }
+}
+```
+
+**Logic:**
+1. If the user has **any** whitelist entries → check if the requesting NAS IP is among them.
+2. If the NAS IP is **not** in the whitelist → reject with `"NAS not authorized for this user"`.
+3. If the user has **no** whitelist entries → authentication continues normally (unrestricted).
+
+**Graceful degradation:**
+- If the `user_nas_whitelist` table does not exist yet (freeradius-api migration not run),
+  the SQL query returns an empty string, comparisons fall through, and authentication
+  continues normally — no blocking.
+- The injection is **idempotent**: if the `nas-whitelist-check` marker is already present
+  in the config (from a previous container start), the script skips injection.
+
+### Managing the whitelist
+
+The whitelist is managed via freeradius-api's NAS Whitelist endpoints:
+
+```bash
+# Pin user to specific NAS devices
+curl -X PUT "http://freeradius-api:8080/api/v1/users/nas-whitelist/replace/pppoe-john" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-key" \
+  -d '{"items":[
+    {"username":"pppoe-john","nasipaddress":"10.0.0.1","organization_id":"org-uuid"},
+    {"username":"pppoe-john","nasipaddress":"10.0.0.2","organization_id":"org-uuid"}
+  ]}'
+
+# Remove NAS lock (allow any NAS)
+curl -X DELETE "http://freeradius-api:8080/api/v1/users/nas-whitelist/by-username/pppoe-john" \
+  -H "X-API-Key: your-key"
+```
+
+> See the [freeradius-api API Documentation](https://github.com/Cepat-Kilat-Teknologi/freeradius-api/blob/main/API_DOCUMENTATION.md#nas-whitelist-tenant-isolation) for the full endpoint reference.
 
 ## High Availability
 

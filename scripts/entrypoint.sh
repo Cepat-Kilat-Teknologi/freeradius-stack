@@ -251,6 +251,38 @@ if [[ -f "sites-enabled/default" ]]; then
             { print }
         ' sites-enabled/default > sites-enabled/default.tmp && mv sites-enabled/default.tmp sites-enabled/default
     fi
+
+    # NAS whitelist tenant isolation: reject users whose NAS is not in whitelist.
+    # The user_nas_whitelist table is managed by freeradius-api (migration 000004).
+    # Logic: if the user has ANY whitelist entries but the requesting NAS is not
+    # among them, reject. Users without whitelist entries are unrestricted.
+    # Graceful degradation: if table doesn't exist yet, SQL returns empty string
+    # which != "0" is true, but inner query also returns "" which == "0" is false,
+    # so auth continues normally (no blocking when table is missing).
+    # Idempotent: skipped if already injected from a previous start.
+    if ! grep -q "nas-whitelist-check" sites-enabled/default; then
+        echo "Hardening authorize: adding NAS whitelist tenant isolation check..."
+        awk '
+            /^authorize[ \t]*\{/ { in_authz = 1 }
+            in_authz && /^[[:space:]]*sql[[:space:]]*$/ && !nas_done {
+                print
+                print ""
+                print "\t# nas-whitelist-check: tenant isolation -- reject if user has NAS restrictions and this NAS is not allowed"
+                print "\tif (\"%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username=\047%{User-Name}\047}\" != \"0\") {"
+                print "\t\tif (\"%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username=\047%{User-Name}\047 AND nasipaddress=\047%{NAS-IP-Address}\047}\" == \"0\") {"
+                print "\t\t\tupdate reply {"
+                print "\t\t\t\t&Reply-Message := \"NAS not authorized for this user\""
+                print "\t\t\t}"
+                print "\t\t\treject"
+                print "\t\t}"
+                print "\t}"
+                nas_done = 1
+                next
+            }
+            in_authz && /^\}/ { in_authz = 0 }
+            { print }
+        ' sites-enabled/default > sites-enabled/default.tmp && mv sites-enabled/default.tmp sites-enabled/default
+    fi
 fi
 
 # Observability: log every authentication result so security incidents are

@@ -41,6 +41,7 @@ The following components are within the scope of this security policy:
 - **Kubernetes manifests** (Deployments, Services, NetworkPolicies, etc.)
 - **Docker Compose files** (production and development configurations)
 - **CI/CD workflows** (GitHub Actions)
+- **NAS whitelist tenant isolation** (unlang injection in entrypoint.sh for multi-tenant NAS access control)
 
 ### Out of Scope
 
@@ -84,6 +85,14 @@ When deploying this stack in production, follow these guidelines:
 - Enable the Prometheus `ServiceMonitor` in Helm to collect RADIUS metrics.
 - Monitor container image vulnerabilities with Trivy or equivalent scanning tools.
 - Review container logs regularly for authentication anomalies.
+
+### Tenant Isolation (Multi-NAS Whitelist)
+
+- The entrypoint script injects an unlang block in the `authorize` section that checks the `user_nas_whitelist` table on every authentication request.
+- Users with whitelist entries can **only** authenticate from whitelisted NAS IP addresses. Requests from non-whitelisted NAS devices are rejected at the RADIUS level — this cannot be bypassed via the API.
+- Users **without** whitelist entries are unrestricted (backward compatible).
+- The whitelist is managed via [freeradius-api](https://github.com/Cepat-Kilat-Teknologi/freeradius-api) NAS Whitelist endpoints (migration 000004).
+- For multi-tenant ISPs: always set NAS whitelist entries during customer provisioning to prevent cross-organization NAS access.
 
 ## Disclosure Policy
 
