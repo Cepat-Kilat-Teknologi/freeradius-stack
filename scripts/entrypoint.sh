@@ -264,7 +264,7 @@ if [[ -f "sites-enabled/default" ]]; then
         echo "Hardening authorize: adding NAS whitelist tenant isolation check..."
         awk '
             /^authorize[ \t]*\{/ { in_authz = 1 }
-            in_authz && /^[[:space:]]*sql[[:space:]]*$/ && !nas_done {
+            in_authz && /^[[:space:]]*-?sql[[:space:]]*$/ && !nas_done {
                 print
                 print ""
                 print "\t# nas-whitelist-check: tenant isolation -- reject if user has NAS restrictions and this NAS is not allowed"
