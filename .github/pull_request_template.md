@@ -1,21 +1,24 @@
-## Summary
+<!-- Link the issue this PR resolves, e.g. "Fixes #123" -->
+Fixes #
 
-<!-- What does this PR do, and why is it needed? -->
+## What changed
 
-## Changes
+## Why
 
-<!-- Bullet list of changes -->
+## How it was tested
+<!-- e.g. Docker Compose smoke test (examples/docker/), helm lint, kubectl apply --dry-run -->
 
--
+## Risk class and rollback
+<!-- risk:low | risk:standard | risk:high; rollback plan required for risk:high -->
 
-## Testing
+## Target environment(s)
+<!-- Deployment methods affected: Docker Compose / Kubernetes manifests / Helm chart, or "none" -->
 
-<!-- How was this tested? -->
+## Database impact
+<!-- none | additive schema change | breaking schema change (expand/contract step) -->
 
-## Checklist
+## Deploy order (cross-repo only)
 
-- [ ] Tested with Docker Compose (`examples/docker/`)
-- [ ] Kubernetes manifests updated (if applicable)
-- [ ] Helm chart updated (if applicable)
-- [ ] Documentation updated
-- [ ] No sensitive data committed
+## Docs updated
+- [ ] README / examples / Helm chart README / CHANGELOG
+- [ ] No secrets, real hostnames or IP addresses committed
