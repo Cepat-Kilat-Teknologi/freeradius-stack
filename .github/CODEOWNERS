@@ -1,9 +1,12 @@
-# CODEOWNERS — Cepat Kilat Teknologi
-# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# Code owners — every pull request needs a review from a code owner.
+# Workplan W2.5 / ADR-015. Owners must be a team (or user) with write access;
+# a bare org handle such as @Cepat-Kilat-Teknologi is silently ignored by GitHub.
+# Split into per-division teams (backend, frontend, devops) as they are staffed.
 
-*                       @Cepat-Kilat-Teknologi
-/Dockerfile             @Cepat-Kilat-Teknologi
-/scripts/               @Cepat-Kilat-Teknologi
-/.github/               @Cepat-Kilat-Teknologi
-/examples/helm/         @Cepat-Kilat-Teknologi
-/examples/kubernetes/   @Cepat-Kilat-Teknologi
+*                       @cepat-kilat-teknologi/engineering
+
+/Dockerfile             @cepat-kilat-teknologi/engineering
+/scripts/               @cepat-kilat-teknologi/engineering
+/.github/               @cepat-kilat-teknologi/engineering
+/examples/helm/         @cepat-kilat-teknologi/engineering
+/examples/kubernetes/   @cepat-kilat-teknologi/engineering
