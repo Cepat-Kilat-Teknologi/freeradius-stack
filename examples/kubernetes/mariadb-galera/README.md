@@ -1,4 +1,4 @@
-# MariaDB Galera — production HA database for FreeRADIUS
+# MariaDB Galera - production HA database for FreeRADIUS
 
 A 3-node synchronous **MariaDB Galera** cluster for the `radius` database, managed by
 [mariadb-operator](https://github.com/mariadb-operator/mariadb-operator). Use this for
@@ -77,8 +77,8 @@ kubectl create job --from=cronjob/mariadb-radius-backup adhoc-1 -n databases
 ## Sizing notes
 
 - The manifest targets a production workload (e.g. ~10K subscribers): `innodb_buffer_pool_size`,
-  connection limits, and storage are sized accordingly — tune to your node capacity.
+  connection limits, and storage are sized accordingly, tune to your node capacity.
 - For sustained production, give the database **dedicated nodes**. Sharing busy general
   worker nodes leads to CPU-reservation contention.
 - For maximum write-path isolation you can front the cluster with the operator's
-  `*-primary` / `*-secondary` Services (read/write split) — not required at this scale.
+  `*-primary` / `*-secondary` Services (read/write split), not required at this scale.

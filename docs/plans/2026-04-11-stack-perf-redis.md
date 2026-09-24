@@ -15,23 +15,23 @@
 ## File Structure
 
 ### Files to modify:
-- `Dockerfile` — tambah `freeradius-redis` package
-- `scripts/entrypoint.sh` — post-schema migration + Redis config
-- `examples/docker/docker-compose.yaml` — tambah Redis service
-- `examples/docker/docker-compose.dev.yaml` — tambah Redis service
-- `examples/docker/.env.example` — tambah Redis env vars
-- `examples/kubernetes/configmap.yaml` — tambah Redis config
-- `examples/kubernetes/freeradius-deployment.yaml` — tambah Redis env + init container
-- `examples/helm/freeradius/values.yaml` — tambah Redis section
-- `examples/helm/freeradius/templates/deployment.yaml` — tambah Redis env
-- `examples/helm/freeradius/templates/configmap.yaml` — tambah Redis keys
-- `examples/helm/freeradius/templates/secret.yaml` — tambah Redis password
-- `CHANGELOG.md` — document changes
+- `Dockerfile`: tambah `freeradius-redis` package
+- `scripts/entrypoint.sh`: post-schema migration + Redis config
+- `examples/docker/docker-compose.yaml`: tambah Redis service
+- `examples/docker/docker-compose.dev.yaml`: tambah Redis service
+- `examples/docker/.env.example`: tambah Redis env vars
+- `examples/kubernetes/configmap.yaml`: tambah Redis config
+- `examples/kubernetes/freeradius-deployment.yaml`: tambah Redis env + init container
+- `examples/helm/freeradius/values.yaml`: tambah Redis section
+- `examples/helm/freeradius/templates/deployment.yaml`: tambah Redis env
+- `examples/helm/freeradius/templates/configmap.yaml`: tambah Redis keys
+- `examples/helm/freeradius/templates/secret.yaml`: tambah Redis password
+- `CHANGELOG.md`: document changes
 
 ### Files to create:
-- `scripts/post-schema.sql` — InnoDB conversion + composite indexes
-- `examples/kubernetes/redis-deployment.yaml` — Redis K8s manifest
-- `examples/helm/freeradius/templates/redis-statefulset.yaml` — Redis Helm template
+- `scripts/post-schema.sql`: InnoDB conversion + composite indexes
+- `examples/kubernetes/redis-deployment.yaml`: Redis K8s manifest
+- `examples/helm/freeradius/templates/redis-statefulset.yaml`: Redis Helm template
 
 ---
 
@@ -238,7 +238,7 @@ git commit -m "feat: add freeradius-redis package for optional Redis accounting"
 
 - [ ] **Step 1: Add Redis environment validation**
 
-Add after the timezone block (after line 73), inside the `if [[ ! -f "$LOCAL_LOCK_FILE" ]]` section would be wrong — this needs to run always. Add after the TZ block and before the MySQL wait:
+Add after the timezone block (after line 73), inside the `if [[ ! -f "$LOCAL_LOCK_FILE" ]]` section would be wrong, this needs to run always. Add after the TZ block and before the MySQL wait:
 
 ```bash
 # Redis accounting configuration (optional, default: disabled)
@@ -369,7 +369,7 @@ Falls back to SQL-only if Redis is unreachable at startup."
 
 ---
 
-## Task 6: Docker Compose — add Redis service
+## Task 6: Docker Compose - add Redis service
 
 **Files:**
 - Modify: `examples/docker/docker-compose.yaml`
@@ -435,9 +435,9 @@ volumes:
   redis_data:
 ```
 
-Add conditional dependency — freeradius depends on redis only when enabled. Since Docker Compose doesn't support conditional depends_on, we add redis as optional (no `condition: service_healthy` hard dependency):
+Add conditional dependency: freeradius depends on redis only when enabled. Since Docker Compose doesn't support conditional depends_on, we add redis as optional (no `condition: service_healthy` hard dependency):
 
-No change to `depends_on` — FreeRADIUS entrypoint already handles Redis-not-ready gracefully by falling back to SQL-only.
+No change to `depends_on`: FreeRADIUS entrypoint already handles Redis-not-ready gracefully by falling back to SQL-only.
 
 - [ ] **Step 2: Add Redis service to dev compose**
 
@@ -523,7 +523,7 @@ git commit -m "docs: add Redis accounting env vars to .env.example"
 
 ---
 
-## Task 8: Kubernetes manifests — Redis deployment + config updates
+## Task 8: Kubernetes manifests - Redis deployment + config updates
 
 **Files:**
 - Create: `examples/kubernetes/redis-deployment.yaml`
@@ -659,7 +659,7 @@ deployment with Redis accounting environment variables."
 
 ---
 
-## Task 9: Helm chart — Redis support
+## Task 9: Helm chart - Redis support
 
 **Files:**
 - Modify: `examples/helm/freeradius/values.yaml`
@@ -819,7 +819,7 @@ spec:
 {{- end }}
 ```
 
-- [ ] **Step 3: Update Helm deployment.yaml — add Redis env vars**
+- [ ] **Step 3: Update Helm deployment.yaml, add Redis env vars**
 
 Add to the `env` section in `templates/deployment.yaml`, after the `HEALTHCHECK_SECRET` block (before `extraEnv`):
 
@@ -843,7 +843,7 @@ Add to the `env` section in `templates/deployment.yaml`, after the `HEALTHCHECK_
             {{- end }}
 ```
 
-- [ ] **Step 4: Update Helm configmap.yaml — add Redis keys**
+- [ ] **Step 4: Update Helm configmap.yaml, add Redis keys**
 
 Add to `templates/configmap.yaml` data section:
 
@@ -851,7 +851,7 @@ Add to `templates/configmap.yaml` data section:
   ACCT_REDIS_ENABLED: {{ if or .Values.redis.enabled .Values.externalRedis.host }}"true"{{ else }}"false"{{ end }}
 ```
 
-- [ ] **Step 5: Update Helm secret.yaml — add Redis password**
+- [ ] **Step 5: Update Helm secret.yaml, add Redis password**
 
 Add to `templates/secret.yaml` data section:
 
