@@ -89,7 +89,7 @@ When deploying this stack in production, follow these guidelines:
 ### Tenant Isolation (Multi-NAS Whitelist)
 
 - The entrypoint script injects an unlang block in the `authorize` section that checks the `user_nas_whitelist` table on every authentication request.
-- Users with whitelist entries can **only** authenticate from whitelisted NAS IP addresses. Requests from non-whitelisted NAS devices are rejected at the RADIUS level — this cannot be bypassed via the API.
+- Users with whitelist entries can **only** authenticate from whitelisted NAS IP addresses. Requests from non-whitelisted NAS devices are rejected at the RADIUS level, this cannot be bypassed via the API.
 - Users **without** whitelist entries are unrestricted (backward compatible).
 - The whitelist is managed via [freeradius-api](https://github.com/Cepat-Kilat-Teknologi/freeradius-api) NAS Whitelist endpoints (migration 000004).
 - For multi-tenant ISPs: always set NAS whitelist entries during customer provisioning to prevent cross-organization NAS access.
