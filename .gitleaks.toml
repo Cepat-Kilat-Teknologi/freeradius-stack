@@ -46,4 +46,4 @@ regexes = [
 description = "Documented example radcheck rows"
 targetRules = ["pppoe-password"]
 regexTarget = "line"
-regexes = ['''(?i)VALUES[ \t]*\([ \t]*'(?:testuser|john)'[ \t]*,[ \t]*'Cleartext-Password''']
+regexes = ['''(?i)(?:VALUES[ \t]*)?\([ \t]*'(?:testuser|john|devuser\d+(?:@[^']*)?)'[ \t]*,[ \t]*'Cleartext-Password''']
