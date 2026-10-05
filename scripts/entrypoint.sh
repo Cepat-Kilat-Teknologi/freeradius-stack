@@ -259,6 +259,14 @@ if [[ -f "sites-enabled/default" ]]; then
     # Graceful degradation: if table doesn't exist yet, SQL returns empty string
     # which != "0" is true, but inner query also returns "" which == "0" is false,
     # so auth continues normally (no blocking when table is missing).
+    #
+    # IMPORTANT: These inline %{sql:...} queries use %{SQL-User-Name} (not
+    # %{User-Name}) for consistency with the 18 queries in queries.conf. When
+    # auto_escape = yes, %{SQL-User-Name} is the escaped version of User-Name
+    # processed through mysql_real_escape_string(), preventing SQL injection and
+    # ensuring lookups match the database even if usernames contain special chars.
+    # Raw %{User-Name} bypasses this escaping entirely.
+    #
     # Idempotent: skipped if already injected from a previous start.
     if ! grep -q "nas-whitelist-check" sites-enabled/default; then
         echo "Hardening authorize: adding NAS whitelist tenant isolation check..."
@@ -268,8 +276,8 @@ if [[ -f "sites-enabled/default" ]]; then
                 print
                 print ""
                 print "\t# nas-whitelist-check: tenant isolation -- reject if user has NAS restrictions and this NAS is not allowed"
-                print "\tif (\"%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username=\047%{User-Name}\047}\" != \"0\") {"
-                print "\t\tif (\"%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username=\047%{User-Name}\047 AND nasipaddress=\047%{NAS-IP-Address}\047}\" == \"0\") {"
+                print "\tif (\"%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username=\047%{SQL-User-Name}\047}\" != \"0\") {"
+                print "\t\tif (\"%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username=\047%{SQL-User-Name}\047 AND nasipaddress=\047%{NAS-IP-Address}\047}\" == \"0\") {"
                 print "\t\t\tupdate reply {"
                 print "\t\t\t\t&Reply-Message := \"NAS not authorized for this user\""
                 print "\t\t\t}"
@@ -282,6 +290,18 @@ if [[ -f "sites-enabled/default" ]]; then
             in_authz && /^\}/ { in_authz = 0 }
             { print }
         ' sites-enabled/default > sites-enabled/default.tmp && mv sites-enabled/default.tmp sites-enabled/default
+    fi
+
+    # Fixup for containers that already have the NAS whitelist injected with the
+    # old %{User-Name} variable. Prior versions of this script used raw
+    # %{User-Name} in inline SQL queries, which bypasses the SQL escaping layer
+    # (auto_escape / safe_characters). This sed replaces it with %{SQL-User-Name}
+    # to match the escaping behavior of all other queries in queries.conf.
+    # Idempotent: no-op if already using %{SQL-User-Name} or if whitelist not injected.
+    if grep -q "user_nas_whitelist WHERE username=.*%{User-Name}" sites-enabled/default 2>/dev/null; then
+        echo "Fixing NAS whitelist queries to use %{SQL-User-Name}..."
+        sed -i "s|user_nas_whitelist WHERE username='%{User-Name}'|user_nas_whitelist WHERE username='%{SQL-User-Name}'|g" sites-enabled/default
+        echo "  NAS whitelist queries fixed."
     fi
 fi
 
@@ -322,6 +342,75 @@ if [[ -f "mods-available/sql" ]]; then
             -e 's|^[[:space:]]*#[[:space:]]*read_clients = yes|        read_clients = yes|' \
             -e 's|^[[:space:]]*#[[:space:]]*client_table = "nas"|        client_table = "nas"|' \
             mods-available/sql
+    fi
+fi
+
+# =============================================================================
+# Enable auto_escape for proper SQL special-character handling (EVERY START)
+# =============================================================================
+# FreeRADIUS default: auto_escape = no → uses mime-encoding for chars outside
+# safe_characters. This breaks SQL lookups for usernames containing ! # $ & + etc.
+# because the mime-encoded value (e.g. user=21test) won't match the DB value
+# (user!test). With auto_escape = yes, the MySQL driver's mysql_real_escape_string()
+# handles escaping — only SQL-dangerous chars are escaped, everything else passes
+# through unchanged, so lookups match correctly.
+#
+# FreeRADIUS own comment in queries.conf: "Using 'auto_escape' is preferred"
+#
+# Safe to enable now: all current usernames use only safe_characters (a-zA-Z0-9@.-_),
+# so no existing data is stored in mime-encoded form. Delay = risk of future data
+# being stored mime-encoded, making a later switch require data migration.
+#
+# Runs outside LOCAL_LOCK_FILE guard: container recreate restores image default.
+QUERIES_CONF="${RADDB_DIR}/mods-config/sql/main/mysql/queries.conf"
+
+if [[ -f "$QUERIES_CONF" ]]; then
+    if grep -qE '^#\s*auto_escape\s*=\s*yes' "$QUERIES_CONF"; then
+        echo "Enabling auto_escape in SQL queries.conf..."
+        sed -i 's/^#[[:space:]]*auto_escape[[:space:]]*=[[:space:]]*yes/auto_escape = yes/' "$QUERIES_CONF"
+        echo "  auto_escape enabled (MySQL-native escaping active)."
+    elif grep -qE '^\s*auto_escape\s*=\s*yes' "$QUERIES_CONF"; then
+        echo "auto_escape already enabled, skipping."
+    fi
+fi
+
+# =============================================================================
+# Disable dot-separator realm check in filter_username policy (EVERY START)
+# =============================================================================
+# FreeRADIUS default policy.d/filter contains a rule that rejects realms
+# without a dot (e.g. @bumdes is rejected, @megadata.net.id passes).
+# This rule assumes internet-style FQDN realms, but ISP PPPoE deployments
+# use single-label realms as tenant identifiers (e.g. @bumdes, @local).
+#
+# Set RADIUS_REQUIRE_DOT_IN_REALM=true to keep the upstream check
+# (only needed for eduroam/enterprise setups).
+#
+# Ref: BUG-2026-10-05 — 328+ @bumdes users rejected for ~3 hours
+# Runs outside LOCAL_LOCK_FILE guard: container recreate restores image default.
+FILTER_POLICY="${RADDB_DIR}/policy.d/filter"
+
+if [[ "${RADIUS_REQUIRE_DOT_IN_REALM:-false}" != "true" ]] && [[ -f "$FILTER_POLICY" ]]; then
+    if grep -q 'Realm does not have at least one dot separator' "$FILTER_POLICY" \
+       && ! grep -q '#DISABLED#.*Realm does not have at least one dot separator' "$FILTER_POLICY"; then
+        echo "Disabling dot-separator realm check in filter_username policy..."
+        awk '
+            /must have at least 1 string-dot-string after @/ { commenting = 1 }
+            commenting && /^[[:space:]]*reject[[:space:]]*$/ { saw_reject = 1 }
+            commenting && saw_reject && /^[[:space:]]*\}[[:space:]]*$/ {
+                print "#DISABLED# " $0
+                commenting = 0
+                saw_reject = 0
+                next
+            }
+            commenting { print "#DISABLED# " $0; next }
+            { print }
+        ' "$FILTER_POLICY" > "${FILTER_POLICY}.tmp" \
+            && mv "${FILTER_POLICY}.tmp" "$FILTER_POLICY" \
+            && chown freerad:freerad "$FILTER_POLICY" \
+            && chmod 664 "$FILTER_POLICY"
+        echo "  dot-separator realm check disabled."
+    else
+        echo "dot-separator realm check already disabled, skipping."
     fi
 fi
 
