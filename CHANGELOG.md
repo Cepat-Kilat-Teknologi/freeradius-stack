@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-05
+
 ### Security
+
+- **SQL escaping hardened (`auto_escape = yes`)**: entrypoint.sh now uncomments
+  `auto_escape = yes` in `queries.conf` on every container start. FreeRADIUS
+  default (`auto_escape = no`) uses mime-encoding for characters outside
+  `safe_characters`, which breaks SQL lookups for usernames containing
+  `! # $ % & + ( )` etc. — the mime-encoded value (e.g. `user=21test`) won't
+  match the database value (`user!test`). With `auto_escape = yes`, the MySQL
+  driver's `mysql_real_escape_string()` handles escaping — only SQL-dangerous
+  characters (`'`, `"`, `\`, NUL) are escaped, everything else passes through
+  unchanged. All 18 SQL queries in `queries.conf` are affected. FreeRADIUS own
+  documentation recommends: "Using `auto_escape` is preferred".
+
+- **NAS whitelist SQL injection fix (`%{SQL-User-Name}`)**: the inline
+  `%{sql:...}` queries in the NAS whitelist tenant-isolation check were using
+  raw `%{User-Name}`, which bypasses the SQL escaping layer entirely. Fixed to
+  use `%{SQL-User-Name}` (the escaped version processed through
+  `mysql_real_escape_string()`), matching the escaping behavior of all other
+  queries in `queries.conf`. Includes a sed fixup that automatically corrects
+  already-injected configs from prior container starts.
 
 - **Fail-closed authentication**: the `authorize` section now rejects any request that
   reaches its end without a credential loaded from the database. Previously an unknown
@@ -24,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **NAS whitelist tenant isolation**: entrypoint.sh injects unlang block in `authorize` section that checks the `user_nas_whitelist` table (managed by freeradius-api migration 000004) to restrict users to specific NAS/BNG devices. Users with whitelist entries can only authenticate from whitelisted NAS IPs; users without entries are unrestricted. Graceful degradation, if the table doesn't exist, authentication continues normally.
+- **Dot-separator realm check toggle (`RADIUS_REQUIRE_DOT_IN_REALM`)**: entrypoint.sh
+  disables the FreeRADIUS default `filter_username` rule that rejects realms without
+  a dot separator (e.g. `@bumdes` rejected, `@megadata.net.id` passes). ISP PPPoE
+  deployments use single-label realms as tenant identifiers — they are not DNS domains.
+  Set `RADIUS_REQUIRE_DOT_IN_REALM=true` to re-enable for eduroam/enterprise setups.
+  Ref: BUG-2026-10-05 — 328+ `@bumdes` users rejected for ~3 hours.
 - Post-schema migration system: automatically applies InnoDB conversion and composite indexes after FreeRADIUS default schema import
 - Optional Redis accounting: buffer Interim-Update packets in Redis for batch processing (`ACCT_REDIS_ENABLED=true`)
 - Redis service in Docker Compose (always available, accounting opt-in via env var)
@@ -99,5 +126,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD pipeline with GitHub Actions and Trivy vulnerability scanning
 - Distributed database locking for multi-pod schema import
 
-[Unreleased]: https://github.com/Cepat-Kilat-Teknologi/freeradius-stack/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Cepat-Kilat-Teknologi/freeradius-stack/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Cepat-Kilat-Teknologi/freeradius-stack/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Cepat-Kilat-Teknologi/freeradius-stack/releases/tag/v1.0.0

@@ -245,6 +245,7 @@ freeradius-stack/
 | `HEALTHCHECK_SECRET` | Secret for internal health checks (localhost only) | No | `testing123` |
 | `RADIUS_ALLOW_PRIVATE_NETWORKS` | Add RFC 1918 ranges as RADIUS clients | No | `true` |
 | `RADIUS_DEBUG` | Enable FreeRADIUS debug mode (-X) | No | - |
+| `RADIUS_REQUIRE_DOT_IN_REALM` | Require dot in realm name (e.g. `@domain.tld`). Set `true` for eduroam/enterprise; leave unset for ISP PPPoE with single-label realms like `@bumdes` | No | `false` |
 | `MYSQL_TLS_CA` | Path to MySQL CA certificate | No | - |
 | `MYSQL_TLS_CERT` | Path to MySQL client certificate | No | - |
 | `MYSQL_TLS_KEY` | Path to MySQL client key | No | - |
