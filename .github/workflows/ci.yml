@@ -223,6 +223,8 @@ jobs:
           images: |
             ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE }}
             ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE }}
+          flavor: |
+            latest=false
           tags: |
             type=raw,value=${{ env.IMAGE_VERSION }}
             type=semver,pattern={{version}}
