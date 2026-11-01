@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Detail module disabled by default**: the FreeRADIUS `detail` module in the
+  accounting section is now commented out on every container start. The detail
+  module writes every RADIUS accounting packet as a text file per NAS
+  (`detail-YYYYMMDD` under `/var/log/freeradius/radacct/<NAS-IP>/`). When SQL
+  is the accounting backend (always enabled by this image), detail files are
+  fully redundant and can fill the disk rapidly in high-traffic deployments.
+  Set `RADIUS_DETAIL_ENABLED=true` to re-enable for debugging/auditing.
+
+### Changed
+- `.omc/` (local editor tool state) added to `.gitignore`
+
 ## [1.1.0] - 2026-10-05
 
 ### Security

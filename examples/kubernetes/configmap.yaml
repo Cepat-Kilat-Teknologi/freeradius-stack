@@ -15,6 +15,9 @@ data:
   RADIUS_CLIENTS: ""
   # Set to "true" to allow all RFC 1918 private networks as RADIUS clients
   RADIUS_ALLOW_PRIVATE_NETWORKS: "false"
+  # Detail module is disabled by default (accounting data goes to SQL).
+  # Set to "true" only for debugging — detail files can fill disk rapidly.
+  # RADIUS_DETAIL_ENABLED: "false"
   # Redis accounting (set ACCT_REDIS_ENABLED to "true" to enable)
   ACCT_REDIS_ENABLED: "false"
   REDIS_HOST: "redis"
