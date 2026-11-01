@@ -232,6 +232,20 @@ echo "Enabling SQL module in sites-enabled/default..."
 if [[ -f "sites-enabled/default" ]]; then
     sed -Ei 's/#[\t ]*sql$/sql/g' sites-enabled/default
 
+    # Disable detail module in accounting section — all accounting data goes to SQL.
+    # The detail module writes every RADIUS accounting packet as a text file per NAS
+    # (detail-YYYYMMDD under /var/log/freeradius/radacct/<NAS-IP>/). When SQL is
+    # the accounting backend, detail files are fully redundant and can fill the disk
+    # rapidly in high-traffic deployments.
+    # Set RADIUS_DETAIL_ENABLED=true to re-enable for debugging/auditing.
+    if [[ "${RADIUS_DETAIL_ENABLED:-false}" != "true" ]]; then
+        sed -Ei 's/^\tdetail$/#\tdetail/' sites-enabled/default
+        echo "Detail module disabled in accounting (data goes to SQL only)."
+    else
+        echo "WARNING: Detail module is ENABLED (RADIUS_DETAIL_ENABLED=true)." >&2
+        echo "  Detail files can grow rapidly. Monitor disk usage!" >&2
+    fi
+
     # SECURITY (fail-closed auth): reject any request that reaches the end of the
     # `authorize` section without a credential loaded from the database. Without
     # this guard an unknown user -- or a degraded SQL backend -- can fall through
