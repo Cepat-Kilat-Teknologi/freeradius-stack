@@ -1,4 +1,4 @@
-.PHONY: help pull up down restart logs status clean backup restore init-env mysql test-auth add-test-user list-backups
+.PHONY: help pull up down restart logs status clean backup restore init-env mysql test-auth test-nas-whitelist add-test-user list-backups
 
 # Load .env file if exists
 ifneq (,$(wildcard ./.env))
@@ -20,6 +20,7 @@ help:
 	@echo ""
 	@echo "  make mysql        - Connect to MySQL"
 	@echo "  make test-auth    - Test RADIUS auth"
+	@echo "  make test-nas-whitelist - Test NAS whitelist enforcement"
 	@echo "  make add-test-user - Add test user"
 	@echo ""
 	@echo "  make backup       - Backup database"
@@ -59,6 +60,9 @@ mysql:
 
 test-auth:
 	@docker compose exec freeradius radtest testuser testpass localhost 0 "$(RADIUS_SECRET)" || true
+
+test-nas-whitelist:
+	@MYSQL_ROOT_PASSWORD="$(MYSQL_ROOT_PASSWORD)" RADIUS_SECRET="$(RADIUS_SECRET)" ./test-nas-whitelist.sh
 
 add-test-user:
 	@docker compose exec db mysql -uroot -p"$(MYSQL_ROOT_PASSWORD)" "$(MYSQL_DBNAME)" -e \

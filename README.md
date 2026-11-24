@@ -481,6 +481,13 @@ if ("%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username='%{User-Name}'
 2. If the NAS IP is **not** in the whitelist → reject with `"NAS not authorized for this user"`.
 3. If the user has **no** whitelist entries → authentication continues normally (unrestricted).
 
+**Use `%{User-Name}`, not `%{SQL-User-Name}`.** `rlm_sql` removes
+`SQL-User-Name` when its authorize call returns, so inside this block it is
+empty and the check never rejects. `%{User-Name}` is still escaped: the sql
+xlat escapes every expansion inside `%{sql:...}`. Versions before this fix
+used `%{SQL-User-Name}`; the entrypoint rewrites such configs on start.
+Test: `examples/docker/test-nas-whitelist.sh` (run in CI).
+
 **Graceful degradation:**
 - If the `user_nas_whitelist` table does not exist yet (freeradius-api migration not run),
   the SQL query returns an empty string, comparisons fall through, and authentication
