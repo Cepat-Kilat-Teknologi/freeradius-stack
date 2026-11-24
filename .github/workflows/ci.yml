@@ -402,6 +402,13 @@ jobs:
           # Test auth (secret must match clients.conf localhost default)
           docker compose exec -T freeradius radtest testuser testpass localhost 0 testing123
 
+      - name: Test NAS whitelist enforcement
+        working-directory: examples/docker
+        env:
+          MYSQL_ROOT_PASSWORD: rootpass123
+          RADIUS_SECRET: testing123
+        run: ./test-nas-whitelist.sh
+
       - name: Cleanup
         if: always()
         working-directory: examples/docker

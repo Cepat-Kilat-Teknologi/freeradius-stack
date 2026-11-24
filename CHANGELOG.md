@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **NAS whitelist was never enforced**: the tenant-isolation check in
+  `authorize` used `%{SQL-User-Name}`, which `rlm_sql` removes when its
+  authorize call returns. The first `COUNT(*)` was therefore always 0 and users
+  with `user_nas_whitelist` rows were accepted on any NAS. The check uses
+  `%{User-Name}` again; it is still escaped, because the sql xlat escapes every
+  expansion inside `%{sql:...}`. The start-up fixup now rewrites configs that
+  were injected with `%{SQL-User-Name}`, so a restarted container is fixed too.
+  Reverts the variable change from the SQL escaping fix below. New CI test
+  `examples/docker/test-nas-whitelist.sh` covers reject, accept, an
+  unrestricted user and a username with a quote.
+
 - **Detail module disabled by default**: the FreeRADIUS `detail` module in the
   accounting section is now commented out on every container start. The detail
   module writes every RADIUS accounting packet as a text file per NAS

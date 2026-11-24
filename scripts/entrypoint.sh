@@ -274,12 +274,13 @@ if [[ -f "sites-enabled/default" ]]; then
     # which != "0" is true, but inner query also returns "" which == "0" is false,
     # so auth continues normally (no blocking when table is missing).
     #
-    # IMPORTANT: These inline %{sql:...} queries use %{SQL-User-Name} (not
-    # %{User-Name}) for consistency with the 18 queries in queries.conf. When
-    # auto_escape = yes, %{SQL-User-Name} is the escaped version of User-Name
-    # processed through mysql_real_escape_string(), preventing SQL injection and
-    # ensuring lookups match the database even if usernames contain special chars.
-    # Raw %{User-Name} bypasses this escaping entirely.
+    # IMPORTANT: These inline %{sql:...} queries must use %{User-Name}, not
+    # %{SQL-User-Name}. rlm_sql removes SQL-User-Name when its authorize call
+    # returns (sql_unset_user), so here it expands to an empty string, the
+    # first COUNT is always 0 and the check never rejects anything.
+    # %{User-Name} is still escaped: the sql xlat escapes every expansion inside
+    # %{sql:...} (auto_escape = yes uses the driver's escape function), and
+    # sql_user_name is "%{User-Name}", so the lookup matches queries.conf.
     #
     # Idempotent: skipped if already injected from a previous start.
     if ! grep -q "nas-whitelist-check" sites-enabled/default; then
@@ -290,8 +291,8 @@ if [[ -f "sites-enabled/default" ]]; then
                 print
                 print ""
                 print "\t# nas-whitelist-check: tenant isolation -- reject if user has NAS restrictions and this NAS is not allowed"
-                print "\tif (\"%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username=\047%{SQL-User-Name}\047}\" != \"0\") {"
-                print "\t\tif (\"%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username=\047%{SQL-User-Name}\047 AND nasipaddress=\047%{NAS-IP-Address}\047}\" == \"0\") {"
+                print "\tif (\"%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username=\047%{User-Name}\047}\" != \"0\") {"
+                print "\t\tif (\"%{sql:SELECT COUNT(*) FROM user_nas_whitelist WHERE username=\047%{User-Name}\047 AND nasipaddress=\047%{NAS-IP-Address}\047}\" == \"0\") {"
                 print "\t\t\tupdate reply {"
                 print "\t\t\t\t&Reply-Message := \"NAS not authorized for this user\""
                 print "\t\t\t}"
@@ -306,15 +307,14 @@ if [[ -f "sites-enabled/default" ]]; then
         ' sites-enabled/default > sites-enabled/default.tmp && mv sites-enabled/default.tmp sites-enabled/default
     fi
 
-    # Fixup for containers that already have the NAS whitelist injected with the
-    # old %{User-Name} variable. Prior versions of this script used raw
-    # %{User-Name} in inline SQL queries, which bypasses the SQL escaping layer
-    # (auto_escape / safe_characters). This sed replaces it with %{SQL-User-Name}
-    # to match the escaping behavior of all other queries in queries.conf.
-    # Idempotent: no-op if already using %{SQL-User-Name} or if whitelist not injected.
-    if grep -q "user_nas_whitelist WHERE username=.*%{User-Name}" sites-enabled/default 2>/dev/null; then
-        echo "Fixing NAS whitelist queries to use %{SQL-User-Name}..."
-        sed -i "s|user_nas_whitelist WHERE username='%{User-Name}'|user_nas_whitelist WHERE username='%{SQL-User-Name}'|g" sites-enabled/default
+    # Fixup for configs injected by an earlier version of this script, which
+    # used %{SQL-User-Name}. That attribute is empty after the sql module
+    # returns, so the whitelist was never enforced. A restarted container keeps
+    # its config and skips the injection above (marker present), so rewrite the
+    # queries here. Idempotent: no-op once the queries use %{User-Name}.
+    if grep -q "user_nas_whitelist WHERE username=.*%{SQL-User-Name}" sites-enabled/default 2>/dev/null; then
+        echo "Fixing NAS whitelist queries to use %{User-Name}..."
+        sed -i "s|user_nas_whitelist WHERE username='%{SQL-User-Name}'|user_nas_whitelist WHERE username='%{User-Name}'|g" sites-enabled/default
         echo "  NAS whitelist queries fixed."
     fi
 fi
